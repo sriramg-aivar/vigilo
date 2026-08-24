@@ -154,8 +154,16 @@ def run_report(args):
     """Generate and send report."""
     print("📧 Vigilo — Generating weekly report...\n")
 
-    collector = MetricsCollector()
-    metrics = collector.collect()
+    if args.mock:
+        collector = MetricsCollector()
+        metrics = collector.collect()
+    else:
+        try:
+            real_collector = RealCollector()
+            metrics = real_collector.collect()
+        except Exception:
+            collector = MetricsCollector()
+            metrics = collector.collect()
 
     engine = VigiloEngine(region=args.region)
     predictions = engine.predict(metrics)
@@ -167,7 +175,7 @@ def run_report(args):
         print(f"✅ Report sent to: {', '.join(args.email)}")
 
     if args.teams_webhook:
-        reporter.send_teams_alert(predictions, args.teams_webhook)
+        reporter.send_teams_alert(predictions, args.teams_webhook, metrics)
         print("✅ Report sent to Microsoft Teams")
 
     if not args.email and not args.teams_webhook:

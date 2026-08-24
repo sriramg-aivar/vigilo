@@ -55,9 +55,9 @@ class ReportGenerator:
         except Exception as e:
             print(f"  ❌ Email failed: {e}")
 
-    def send_teams_alert(self, predictions: dict, webhook_url: str):
+    def send_teams_alert(self, predictions: dict, webhook_url: str, metrics: dict = None):
         """Send alert to Microsoft Teams via incoming webhook."""
-        card = self._build_teams_card(predictions)
+        card = self._build_teams_card(predictions, metrics)
 
         try:
             response = requests.post(
@@ -143,14 +143,22 @@ class ReportGenerator:
         </html>
         """
 
-    def _build_teams_card(self, predictions: dict) -> dict:
-        """Build Microsoft Teams Adaptive Card with Error/Fix/Prevent format."""
+    def _build_teams_card(self, predictions: dict, metrics: dict = None) -> dict:
+        """Build Microsoft Teams Adaptive Card with Error/Fix/Prevent format.
+        Includes full context: time, cluster, account, region, nodes, pods."""
         preds = predictions.get("predictions", [])
         score = predictions.get("cluster_score", "N/A")
         summary = predictions.get("summary", "")
 
         critical = [p for p in preds if p.get("severity") == "CRITICAL"]
         warning = [p for p in preds if p.get("severity") == "WARNING"]
+
+        # Extract cluster info from metrics
+        cluster_info = (metrics or {}).get("cluster_info", {})
+        cluster_name = cluster_info.get("name", "unknown")
+        region = cluster_info.get("region", "us-east-1")
+        collection_time = cluster_info.get("collection_time", datetime.utcnow().isoformat())
+        node_count = len((metrics or {}).get("nodes", []))
 
         # Build prediction blocks in Error / Fix / Prevent format
         body = [
@@ -161,9 +169,16 @@ class ReportGenerator:
                 "size": "Large"
             },
             {
-                "type": "TextBlock",
-                "text": f"📊 Cluster Score: **{score}/10** | 🚨 {len(critical)} Critical | ⚠️ {len(warning)} Warnings",
-                "wrap": True
+                "type": "FactSet",
+                "facts": [
+                    {"title": "📊 Score", "value": f"{score}/10"},
+                    {"title": "🏗️ Cluster", "value": cluster_name},
+                    {"title": "🌐 Region", "value": region},
+                    {"title": "🖥️ Nodes", "value": str(node_count)},
+                    {"title": "🚨 Critical", "value": str(len(critical))},
+                    {"title": "⚠️ Warnings", "value": str(len(warning))},
+                    {"title": "🕐 Report Time", "value": collection_time[:19].replace("T", " ") + " UTC"}
+                ]
             },
             {
                 "type": "TextBlock",
