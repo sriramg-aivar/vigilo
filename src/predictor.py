@@ -11,8 +11,28 @@ from datetime import datetime, timedelta
 class VigiloEngine:
     """Core prediction engine using AWS Bedrock (Claude)."""
 
-    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"):
-        self.bedrock = boto3.client("bedrock-runtime", region_name=region)
+    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0",
+                 aws_access_key_id: str = None, aws_secret_access_key: str = None, aws_session_token: str = None):
+        """
+        Initialize the prediction engine.
+        
+        Args:
+            region: AWS region for Bedrock
+            model_id: Bedrock model inference profile ID
+            aws_access_key_id: Explicit AWS key for Bedrock (if different from kubectl creds)
+            aws_secret_access_key: Explicit AWS secret for Bedrock
+            aws_session_token: Explicit AWS session token for Bedrock
+        """
+        if aws_access_key_id and aws_secret_access_key:
+            self.bedrock = boto3.client(
+                "bedrock-runtime",
+                region_name=region,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_session_token=aws_session_token
+            )
+        else:
+            self.bedrock = boto3.client("bedrock-runtime", region_name=region)
         self.model_id = model_id
 
     def predict(self, cluster_metrics: dict) -> dict:

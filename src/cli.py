@@ -27,6 +27,9 @@ def main():
     scan_parser.add_argument("--context", type=str, default=None, help="K8s context to use")
     scan_parser.add_argument("--region", type=str, default="us-east-1", help="AWS region for Bedrock")
     scan_parser.add_argument("--model", type=str, default="us.anthropic.claude-sonnet-4-5-20250929-v1:0", help="Bedrock model ID")
+    scan_parser.add_argument("--bedrock-key", type=str, default=None, help="AWS Access Key for Bedrock (if different account)")
+    scan_parser.add_argument("--bedrock-secret", type=str, default=None, help="AWS Secret Key for Bedrock")
+    scan_parser.add_argument("--bedrock-token", type=str, default=None, help="AWS Session Token for Bedrock")
     scan_parser.add_argument("--output", type=str, choices=["terminal", "json", "pdf"], default="terminal", help="Output format")
     scan_parser.add_argument("--output-file", type=str, default=None, help="Output file path (for json/pdf)")
     scan_parser.add_argument("--mock", action="store_true", help="Use mock data instead of real cluster")
@@ -103,7 +106,17 @@ def run_scan(args):
     if args.dry_run:
         predictions = _sample_predictions()
     else:
-        engine = VigiloEngine(region=args.region, model_id=args.model)
+        import os
+        bedrock_key = args.bedrock_key or os.environ.get("BEDROCK_AWS_ACCESS_KEY_ID")
+        bedrock_secret = args.bedrock_secret or os.environ.get("BEDROCK_AWS_SECRET_ACCESS_KEY")
+        bedrock_token = args.bedrock_token or os.environ.get("BEDROCK_AWS_SESSION_TOKEN")
+        engine = VigiloEngine(
+            region=args.region,
+            model_id=args.model,
+            aws_access_key_id=bedrock_key,
+            aws_secret_access_key=bedrock_secret,
+            aws_session_token=bedrock_token
+        )
         predictions = engine.predict(metrics)
 
     # Output
