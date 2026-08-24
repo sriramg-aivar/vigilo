@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vigilo-scan
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: vigilo
+    component: scan
+spec:
+  schedule: {{ .Values.schedule.scan | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ .Values.serviceAccount.name }}
+          restartPolicy: OnFailure
+          containers:
+            - name: vigilo-scan
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["python3", "main.py", "scan"]
+              envFrom:
+                - configMapRef:
+                    name: vigilo-config
+              {{- if .Values.aws.bedrock.accessKeyId }}
+              env:
+                - name: BEDROCK_AWS_ACCESS_KEY_ID
+                  value: {{ .Values.aws.bedrock.accessKeyId | quote }}
+                - name: BEDROCK_AWS_SECRET_ACCESS_KEY
+                  value: {{ .Values.aws.bedrock.secretAccessKey | quote }}
+                - name: BEDROCK_AWS_SESSION_TOKEN
+                  value: {{ .Values.aws.bedrock.sessionToken | quote }}
+              {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vigilo-report
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: vigilo
+    component: report
+spec:
+  schedule: {{ .Values.schedule.report | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ .Values.serviceAccount.name }}
+          restartPolicy: OnFailure
+          containers:
+            - name: vigilo-report
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command: ["python3", "main.py", "report", "--teams-webhook", "$(TEAMS_WEBHOOK_URL)"]
+              envFrom:
+                - configMapRef:
+                    name: vigilo-config
+              {{- if .Values.aws.bedrock.accessKeyId }}
+              env:
+                - name: BEDROCK_AWS_ACCESS_KEY_ID
+                  value: {{ .Values.aws.bedrock.accessKeyId | quote }}
+                - name: BEDROCK_AWS_SECRET_ACCESS_KEY
+                  value: {{ .Values.aws.bedrock.secretAccessKey | quote }}
+                - name: BEDROCK_AWS_SESSION_TOKEN
+                  value: {{ .Values.aws.bedrock.sessionToken | quote }}
+              {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}

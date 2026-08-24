@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vigilo-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: vigilo
+data:
+  AWS_DEFAULT_REGION: {{ .Values.aws.region | quote }}
+  VIGILO_MODEL_ID: {{ .Values.bedrock.modelId | quote }}
+  VIGILO_MAX_TOKENS: {{ .Values.bedrock.maxTokens | quote }}
+  {{- if .Values.notifications.teamsWebhook }}
+  TEAMS_WEBHOOK_URL: {{ .Values.notifications.teamsWebhook | quote }}
+  {{- end }}
+  {{- if .Values.notifications.email }}
+  VIGILO_EMAIL: {{ .Values.notifications.email | quote }}
+  {{- end }}
+  {{- if .Values.notifications.sesSender }}
+  SES_SENDER: {{ .Values.notifications.sesSender | quote }}
+  {{- end }}

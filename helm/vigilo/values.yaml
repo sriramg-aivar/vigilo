@@ -1,0 +1,72 @@
+# Vigilo Helm Chart Values
+# Configure these for your cluster
+
+# Docker image
+image:
+  repository: sriramg-aivar/vigilo
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+# AWS Configuration
+aws:
+  region: us-east-1
+  # Bedrock credentials (for AI predictions)
+  # If running in same account as Bedrock, leave empty (uses pod IAM role)
+  # If cross-account, provide explicit credentials or role ARN
+  bedrock:
+    roleArn: ""  # arn:aws:iam::283744739430:role/vigilo-bedrock-access
+    # Or static creds (not recommended for production — use IRSA)
+    accessKeyId: ""
+    secretAccessKey: ""
+    sessionToken: ""
+
+# Notifications
+notifications:
+  # Microsoft Teams webhook URL
+  teamsWebhook: ""
+  # Email (AWS SES)
+  email: ""
+  sesSender: ""
+
+# Schedule (cron format)
+schedule:
+  # How often to scan cluster for predictions
+  scan: "0 */6 * * *"        # Every 6 hours
+  # When to send weekly report
+  report: "0 9 * * MON"      # Monday 9 AM
+
+# Scan configuration
+scan:
+  # Which namespaces to monitor (empty = all non-system namespaces)
+  namespaces: []
+  # Namespaces to never touch/scan
+  excludeNamespaces:
+    - kube-system
+    - kube-public
+    - kube-node-lease
+
+# Bedrock model
+bedrock:
+  modelId: "us.anthropic.claude-sonnet-4-5-20250929-v1:0"
+  maxTokens: 4096
+
+# Service Account
+serviceAccount:
+  create: true
+  name: vigilo
+  annotations: {}
+  # For IRSA (IAM Roles for Service Accounts):
+  # annotations:
+  #   eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT:role/vigilo-role
+
+# Resources
+resources:
+  requests:
+    memory: "128Mi"
+    cpu: "100m"
+  limits:
+    memory: "512Mi"
+    cpu: "500m"
+
+# Namespace to deploy Vigilo into
+namespace: vigilo

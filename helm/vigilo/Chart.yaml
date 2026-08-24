@@ -1,0 +1,16 @@
+apiVersion: v2
+name: vigilo
+description: "🔮 Vigilo — AI-powered Kubernetes failure prediction engine"
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - monitoring
+  - ai
+  - prediction
+  - failure-detection
+  - eks
+maintainers:
+  - name: Sriram G
+    email: sriram.g@aivar.tech

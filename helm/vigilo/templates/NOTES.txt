@@ -1,0 +1,25 @@
+
+🔮 Vigilo has been installed successfully!
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Configuration:
+   Namespace:    {{ .Values.namespace }}
+   Scan:         {{ .Values.schedule.scan }}
+   Report:       {{ .Values.schedule.report }}
+   Teams:        {{ if .Values.notifications.teamsWebhook }}Configured ✅{{ else }}Not configured{{ end }}
+   Email:        {{ if .Values.notifications.email }}{{ .Values.notifications.email }}{{ else }}Not configured{{ end }}
+
+🔍 Check CronJobs:
+   kubectl get cronjobs -n {{ .Values.namespace }}
+
+📊 Run a manual scan:
+   kubectl create job vigilo-scan-manual --from=cronjob/vigilo-scan -n {{ .Values.namespace }}
+
+📜 View scan logs:
+   kubectl logs -l app=vigilo -n {{ .Values.namespace }} --tail=50
+
+🗑️ Uninstall:
+   helm uninstall vigilo -n {{ .Values.namespace }}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
