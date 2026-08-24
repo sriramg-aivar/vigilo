@@ -39,34 +39,40 @@ echo -e "${GREEN}🟢 VIGILO — Setup${NC}"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 
-# --- Check AWS credentials ---
-echo "🔐 Checking AWS credentials (profile: $AWS_PROFILE)..."
-ACCOUNT=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query "Account" --output text 2>/dev/null || echo "")
+# --- Check AWS credentials (env vars OR profile) ---
+echo "🔐 Checking AWS credentials..."
+if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+  ACCOUNT=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "")
+  AWS_ARGS=""
+else
+  ACCOUNT=$(aws sts get-caller-identity $AWS_ARGS --query "Account" --output text 2>/dev/null || echo "")
+  AWS_ARGS="--profile $AWS_PROFILE"
+fi
 if [ -z "$ACCOUNT" ]; then
   echo -e "${RED}❌ AWS credentials expired or not set.${NC}"
   echo ""
-  echo "   Run: aws sso login --profile cloud-migration"
-  echo ""
-  echo "   Or export credentials manually:"
+  echo "   Option 1: Export credentials manually:"
   echo '   export AWS_ACCESS_KEY_ID="..."'
   echo '   export AWS_SECRET_ACCESS_KEY="..."'
   echo '   export AWS_SESSION_TOKEN="..."'
+  echo ""
+  echo "   Option 2: aws sso login --profile cloud-migration"
   exit 1
 fi
 echo -e "   ${GREEN}✅ Account: $ACCOUNT${NC}"
 echo ""
 
 # --- Check if cluster exists ---
-EXISTING=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --profile "$AWS_PROFILE" --query "cluster.status" --output text 2>/dev/null || echo "NOT_FOUND")
+EXISTING=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" $AWS_ARGS --query "cluster.status" --output text 2>/dev/null || echo "NOT_FOUND")
 
 if [ "$EXISTING" = "ACTIVE" ]; then
   echo -e "${GREEN}✅ Cluster $CLUSTER_NAME already exists.${NC}"
   echo "   Updating kubeconfig..."
-  aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" --profile "$AWS_PROFILE"
+  aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$REGION" $AWS_ARGS
   echo ""
 
   # Check nodes
-  DESIRED=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name core --region "$REGION" --profile "$AWS_PROFILE" --query "nodegroup.scalingConfig.desiredSize" --output text 2>/dev/null || echo "0")
+  DESIRED=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name core --region "$REGION" $AWS_ARGS --query "nodegroup.scalingConfig.desiredSize" --output text 2>/dev/null || echo "0")
   if [ "$DESIRED" = "0" ]; then
     echo -e "${YELLOW}⚠️  Nodes are scaled to 0. Scaling up to $NODES...${NC}"
     aws eks update-nodegroup-config \
@@ -74,7 +80,7 @@ if [ "$EXISTING" = "ACTIVE" ]; then
       --nodegroup-name core \
       --scaling-config minSize=2,maxSize=3,desiredSize=$NODES \
       --region "$REGION" \
-      --profile "$AWS_PROFILE" > /dev/null
+      $AWS_ARGS > /dev/null
     echo "   ⏳ Waiting for nodes to join (~2-3 min)..."
     sleep 150
   fi
@@ -91,7 +97,7 @@ else
   echo "   This takes ~15 minutes..."
   echo ""
 
-  AWS_PROFILE="$AWS_PROFILE" eksctl create cluster \
+  eksctl create cluster \
     --name "$CLUSTER_NAME" \
     --region "$REGION" \
     --version 1.31 \

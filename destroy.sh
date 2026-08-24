@@ -46,7 +46,7 @@ echo ""
 
 # Check creds
 echo "🔐 Checking credentials..."
-ACCOUNT=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query "Account" --output text 2>/dev/null || echo "")
+ACCOUNT=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "")
 if [ -z "$ACCOUNT" ]; then
   echo -e "${RED}❌ AWS credentials expired. Run: aws sso login --profile cloud-migration${NC}"
   exit 1
@@ -55,23 +55,23 @@ echo -e "   ${GREEN}✅ Account: $ACCOUNT${NC}"
 echo ""
 
 # Check if cluster exists
-EXISTING=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION" --profile "$AWS_PROFILE" --query "cluster.status" --output text 2>/dev/null || echo "NOT_FOUND")
+EXISTING=$(aws eks describe-cluster --name "$CLUSTER_NAME" --region "$REGION"  --query "cluster.status" --output text 2>/dev/null || echo "NOT_FOUND")
 
 if [ "$EXISTING" = "NOT_FOUND" ]; then
   echo "ℹ️  Cluster $CLUSTER_NAME does not exist."
   echo ""
   echo "   Checking for leftover CloudFormation stacks..."
-  STACKS=$(aws cloudformation list-stacks --profile "$AWS_PROFILE" --region "$REGION" --stack-status-filter CREATE_COMPLETE ROLLBACK_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?contains(StackName,'vigilo')].StackName" --output text)
+  STACKS=$(aws cloudformation list-stacks  --region "$REGION" --stack-status-filter CREATE_COMPLETE ROLLBACK_COMPLETE UPDATE_COMPLETE --query "StackSummaries[?contains(StackName,'vigilo')].StackName" --output text)
   if [ -n "$STACKS" ]; then
     echo "   Found leftover stacks: $STACKS"
     for STACK in $STACKS; do
       echo "   🗑  Deleting stack: $STACK"
-      aws cloudformation update-termination-protection --no-enable-termination-protection --stack-name "$STACK" --region "$REGION" --profile "$AWS_PROFILE" 2>/dev/null || true
-      aws cloudformation delete-stack --stack-name "$STACK" --region "$REGION" --profile "$AWS_PROFILE"
+      aws cloudformation update-termination-protection --no-enable-termination-protection --stack-name "$STACK" --region "$REGION"  2>/dev/null || true
+      aws cloudformation delete-stack --stack-name "$STACK" --region "$REGION" 
     done
     echo "   ⏳ Waiting for stacks to delete..."
     for STACK in $STACKS; do
-      aws cloudformation wait stack-delete-complete --stack-name "$STACK" --region "$REGION" --profile "$AWS_PROFILE" 2>/dev/null || true
+      aws cloudformation wait stack-delete-complete --stack-name "$STACK" --region "$REGION"  2>/dev/null || true
     done
     echo -e "   ${GREEN}✅ Stacks deleted.${NC}"
   else
@@ -87,7 +87,7 @@ echo "🗑  Deleting cluster $CLUSTER_NAME (this takes ~10 minutes)..."
 echo "   eksctl will delete: nodegroup, cluster, VPC, subnets, NAT, IGW, stacks"
 echo ""
 
-AWS_PROFILE="$AWS_PROFILE" eksctl delete cluster \
+eksctl delete cluster \
   --name "$CLUSTER_NAME" \
   --region "$REGION" \
   --wait

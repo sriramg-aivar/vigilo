@@ -26,7 +26,7 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Check creds
-ACCOUNT=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query "Account" --output text 2>/dev/null || echo "")
+ACCOUNT=$(aws sts get-caller-identity --query "Account" --output text 2>/dev/null || echo "")
 if [ -z "$ACCOUNT" ]; then
   echo "❌ AWS credentials expired. Run: aws sso login --profile cloud-migration"
   exit 1
@@ -35,7 +35,7 @@ echo "✅ Account: $ACCOUNT"
 echo ""
 
 # Get all node groups and scale to 0
-NODEGROUPS=$(aws eks list-nodegroups --cluster-name "$CLUSTER_NAME" --region "$REGION" --profile "$AWS_PROFILE" --query "nodegroups[]" --output text 2>/dev/null)
+NODEGROUPS=$(aws eks list-nodegroups --cluster-name "$CLUSTER_NAME" --region "$REGION"  --query "nodegroups[]" --output text 2>/dev/null)
 
 if [ -z "$NODEGROUPS" ]; then
   echo "❌ No node groups found for $CLUSTER_NAME"
@@ -43,14 +43,14 @@ if [ -z "$NODEGROUPS" ]; then
 fi
 
 for NG in $NODEGROUPS; do
-  CURRENT=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name "$NG" --region "$REGION" --profile "$AWS_PROFILE" --query "nodegroup.scalingConfig.desiredSize" --output text)
+  CURRENT=$(aws eks describe-nodegroup --cluster-name "$CLUSTER_NAME" --nodegroup-name "$NG" --region "$REGION"  --query "nodegroup.scalingConfig.desiredSize" --output text)
   echo "   📉 $NG: $CURRENT → 0"
   aws eks update-nodegroup-config \
     --cluster-name "$CLUSTER_NAME" \
     --nodegroup-name "$NG" \
     --scaling-config minSize=0,maxSize=3,desiredSize=0 \
     --region "$REGION" \
-    --profile "$AWS_PROFILE" > /dev/null 2>&1
+     > /dev/null 2>&1
 done
 
 echo ""
