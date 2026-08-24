@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — CLI Interface
+Vigilo — CLI Interface
 """
 
 import argparse
@@ -7,7 +7,7 @@ import json
 import sys
 from datetime import datetime
 
-from src.predictor import ProphecyEngine
+from src.predictor import VigiloEngine
 from src.collector import MetricsCollector
 from src.reporter import ReportGenerator
 from src.scheduler import ClusterScheduler
@@ -16,8 +16,8 @@ from src.real_collector import RealCollector
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="kubogent-prophecy",
-        description="🔮 Kubogent Prophecy — Predict Kubernetes failures before they happen"
+        prog="vigilo",
+        description="🔮 Vigilo — Predict Kubernetes failures before they happen"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -93,7 +93,7 @@ def main():
 
 def run_scan(args):
     """Run a cluster scan and generate predictions."""
-    print("🔮 Kubogent Prophecy — Scanning cluster...\n")
+    print("🔮 Vigilo — Scanning cluster...\n")
 
     # Collect metrics
     if args.mock:
@@ -121,7 +121,7 @@ def run_scan(args):
     if args.dry_run:
         predictions = _sample_predictions()
     else:
-        engine = ProphecyEngine(region=args.region, model_id=args.model)
+        engine = VigiloEngine(region=args.region, model_id=args.model)
         predictions = engine.predict(metrics)
 
     # Output
@@ -135,7 +135,7 @@ def run_scan(args):
             print(output)
     elif args.output == "pdf":
         reporter = ReportGenerator()
-        filepath = args.output_file or f"prophecy-report-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf"
+        filepath = args.output_file or f"vigilo-report-{datetime.now().strftime('%Y%m%d-%H%M')}.pdf"
         reporter.generate_pdf(predictions, metrics, filepath)
         print(f"✅ PDF report saved to {filepath}")
     else:
@@ -145,7 +145,7 @@ def run_scan(args):
 
 def run_predict_deploy(args):
     """Predict deployment impact."""
-    print("⚡ Kubogent Prophecy — Predicting deployment impact...\n")
+    print("⚡ Vigilo — Predicting deployment impact...\n")
 
     # Load deployment manifest
     import yaml
@@ -161,7 +161,7 @@ def run_predict_deploy(args):
 
     # Predict impact
     print("🧠 Analyzing deployment impact...\n")
-    engine = ProphecyEngine(region=args.region, model_id=args.model)
+    engine = VigiloEngine(region=args.region, model_id=args.model)
     impact = engine.predict_deployment_impact(metrics, deployment_diff)
 
     # Print results
@@ -170,12 +170,12 @@ def run_predict_deploy(args):
 
 def run_report(args):
     """Generate and send report."""
-    print("📧 Kubogent Prophecy — Generating weekly report...\n")
+    print("📧 Vigilo — Generating weekly report...\n")
 
     collector = MetricsCollector()
     metrics = collector.collect()
 
-    engine = ProphecyEngine(region=args.region)
+    engine = VigiloEngine(region=args.region)
     predictions = engine.predict(metrics)
 
     reporter = ReportGenerator()

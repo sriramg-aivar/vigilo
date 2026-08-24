@@ -1,8 +1,8 @@
-# 🔮 Kubogent Prophecy
+# 🔮 Vigilo
 
 **Predict Kubernetes failures before they happen. Auto-manage cluster lifecycle.**
 
-Kubogent Prophecy is an AI-powered engine that:
+Vigilo is an AI-powered engine that:
 1. **Predicts failures** — disk full, OOM kills, cert expiry, scaling limits — days in advance
 2. **Schedules clusters** — auto shutdown at night (9 PM), auto wakeup in morning (9 AM)
 3. **Reports status** — full cluster inventory (nodes, pods, namespaces, Karpenter, KEDA)
@@ -16,8 +16,8 @@ Install via Helm or run as CLI. Works with any EKS cluster.
 
 ```bash
 # Clone and install
-git clone https://github.com/sriramg-aivar/kubogent-prophecy.git
-cd kubogent-prophecy
+git clone https://github.com/sriramg-aivar/vigilo.git
+cd vigilo
 pip install -r requirements.txt
 
 # Predict failures (uses mock data — no cluster needed)
@@ -116,7 +116,7 @@ Shows full inventory at any time:
 
 ### Prediction Scan
 ```
-🔮 Kubogent Prophecy — Scanning cluster...
+🔮 Vigilo — Scanning cluster...
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   📊 Cluster Score: 3.2/10
@@ -183,7 +183,7 @@ Shows full inventory at any time:
 
 ### Shutdown (Dry Run)
 ```
-🌙 Kubogent Prophecy — Initiating cluster shutdown...
+🌙 Vigilo — Initiating cluster shutdown...
 
   1. Save current replica counts to state file
   2. Scale deployments to 0:
@@ -201,7 +201,7 @@ Shows full inventory at any time:
 
 ### Wakeup (Dry Run)
 ```
-☀️ Kubogent Prophecy — Waking up cluster...
+☀️ Vigilo — Waking up cluster...
 
   1. Load saved state from state file
   2. Restore deployments to original replicas:
@@ -232,9 +232,9 @@ python3 main.py scan --kubeconfig ~/.kube/config
 ### Option 2: Helm Chart (In-Cluster CronJob)
 
 ```bash
-helm repo add kubogent https://aivar-tech.github.io/kubogent-prophecy
-helm install prophecy kubogent/prophecy \
-  --namespace kubogent \
+helm repo add vigilo https://aivar-tech.github.io/vigilo
+helm install vigilo vigilo/vigilo \
+  --namespace vigilo \
   --create-namespace \
   --set aws.region=us-east-1 \
   --set notifications.teamsWebhook="https://outlook.office.com/webhook/xxx" \
@@ -249,7 +249,7 @@ helm install prophecy kubogent/prophecy \
 docker run --rm \
   -v ~/.kube/config:/root/.kube/config \
   -v ~/.aws:/root/.aws \
-  aivar/kubogent-prophecy scan
+  aivar/vigilo scan
 ```
 
 ---
@@ -264,7 +264,7 @@ docker run --rm \
 | `AWS_ACCESS_KEY_ID` | Yes* | AWS credentials (*or use IAM role) |
 | `AWS_SECRET_ACCESS_KEY` | Yes* | AWS credentials |
 | `KUBECONFIG` | No | Path to kubeconfig (default: ~/.kube/config) |
-| `PROPHECY_MODEL_ID` | No | Bedrock model (default: us.anthropic.claude-sonnet-4-20250514-v1:0) |
+| `VIGILO_MODEL_ID` | No | Bedrock model (default: us.anthropic.claude-sonnet-4-20250514-v1:0) |
 | `TEAMS_WEBHOOK_URL` | No | Microsoft Teams webhook URL |
 | `SES_SENDER` | No | Email sender (for reports) |
 
@@ -311,7 +311,7 @@ thresholds:
 │              Your EKS Cluster                        │
 │                                                     │
 │  ┌───────────────────────────────────────────┐      │
-│  │     Kubogent Prophecy (CronJob/Pod)       │      │
+│  │     Vigilo (CronJob/Pod)       │      │
 │  │                                           │      │
 │  │  ┌────────────┐  ┌────────────────────┐   │      │
 │  │  │ Collector  │  │    Predictor       │   │      │
@@ -387,8 +387,8 @@ For 3 non-prod clusters = **$2,592/month saved**
 
 ```bash
 # Clone
-git clone https://github.com/sriramg-aivar/kubogent-prophecy.git
-cd kubogent-prophecy
+git clone https://github.com/sriramg-aivar/vigilo.git
+cd vigilo
 
 # Install
 pip install -r requirements.txt

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Entry point for kubogent-prophecy CLI."""
+"""Entry point for vigilo CLI."""
 
 from src.cli import main
 

@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — Real K8s Cluster Collector
+Vigilo — Real K8s Cluster Collector
 Connects to actual EKS cluster and collects live metrics.
 """
 

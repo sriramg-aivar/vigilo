@@ -1,4 +1,4 @@
-# 🔮 Kubogent Prophecy — Cluster Health Report
+# 🔮 Vigilo — Cluster Health Report
 
 **Cluster:** aivar-production-eks  
 **Generated:** 2026-08-24 10:21 UTC  
@@ -121,4 +121,4 @@ Cluster is in critical condition with multiple imminent failures including certi
 
 ---
 
-*Powered by Kubogent Prophecy — AI-driven Kubernetes failure prediction*
+*Powered by Vigilo — AI-driven Kubernetes failure prediction*

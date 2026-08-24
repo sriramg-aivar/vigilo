@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — Report Generator
+Vigilo — Report Generator
 Generates PDF reports, sends email via SES/SMTP, and posts to Microsoft Teams.
 """
 
@@ -79,11 +79,11 @@ class ReportGenerator:
         score = predictions.get("cluster_score", "N/A")
 
         if critical > 0:
-            return f"🚨 Kubogent Prophecy — {critical} CRITICAL predictions | Score: {score}/10"
+            return f"🚨 Vigilo — {critical} CRITICAL predictions | Score: {score}/10"
         elif warning > 0:
-            return f"⚠️ Kubogent Prophecy — {warning} warnings | Score: {score}/10"
+            return f"⚠️ Vigilo — {warning} warnings | Score: {score}/10"
         else:
-            return f"✅ Kubogent Prophecy — Cluster healthy | Score: {score}/10"
+            return f"✅ Vigilo — Cluster healthy | Score: {score}/10"
 
     def _build_email_body(self, predictions: dict, metrics: dict) -> str:
         """Build HTML email body."""
@@ -110,7 +110,7 @@ class ReportGenerator:
         return f"""
         <html>
         <body style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:20px;">
-            <h1 style="color:#333;">🔮 Kubogent Prophecy — Weekly Report</h1>
+            <h1 style="color:#333;">🔮 Vigilo — Weekly Report</h1>
             <p style="color:#666;">Cluster: <strong>{cluster_name}</strong> | Generated: {now}</p>
             
             <div style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0;">
@@ -136,7 +136,7 @@ class ReportGenerator:
 
             <hr style="margin:30px 0;border:none;border-top:1px solid #eee;">
             <p style="color:#999;font-size:12px;">
-                Powered by Kubogent Prophecy | AI-driven Kubernetes failure prediction<br>
+                Powered by Vigilo | AI-driven Kubernetes failure prediction<br>
                 Predictions are AI-generated based on cluster metrics and trend analysis.
             </p>
         </body>
@@ -173,7 +173,7 @@ class ReportGenerator:
                         "body": [
                             {
                                 "type": "TextBlock",
-                                "text": "🔮 Kubogent Prophecy",
+                                "text": "🔮 Vigilo",
                                 "weight": "Bolder",
                                 "size": "Large"
                             },
@@ -205,7 +205,7 @@ class ReportGenerator:
         cluster_name = metrics.get("cluster_info", {}).get("name", "Unknown")
         now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
-        md = f"""# 🔮 Kubogent Prophecy — Cluster Health Report
+        md = f"""# 🔮 Vigilo — Cluster Health Report
 
 **Cluster:** {cluster_name}  
 **Generated:** {now}  
@@ -252,6 +252,6 @@ class ReportGenerator:
 
         md += """---
 
-*Powered by Kubogent Prophecy — AI-driven Kubernetes failure prediction*
+*Powered by Vigilo — AI-driven Kubernetes failure prediction*
 """
         return md

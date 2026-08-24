@@ -1,4 +1,4 @@
-# 🔮 Kubogent Prophecy — Setup & Run Guide
+# 🔮 Vigilo — Setup & Run Guide
 
 ## What We Need
 
@@ -24,7 +24,7 @@ We need a separate account for testing. The cluster doesn't need real workloads 
 ```bash
 # 1. Create EKS cluster
 eksctl create cluster \
-  --name kubogent-test \
+  --name vigilo-test \
   --region ap-south-1 \
   --version 1.29 \
   --nodegroup-name core \
@@ -35,7 +35,7 @@ eksctl create cluster \
 # 2. Install Karpenter (for node auto-scaling demo)
 # 3. Install KEDA (for autoscaling demo)
 # 4. Deploy dummy Convogent services (from bank repo values)
-# 5. Install Kubogent Prophecy via Helm
+# 5. Install Vigilo via Helm
 ```
 
 ### Dummy Deployments (from bank repo):
@@ -50,7 +50,7 @@ We'll deploy the same chart structure as Convogent (frontend, backend, chat, eva
 
 ## Step 2: Cross-Account Bedrock Access
 
-Prophecy runs inside the **test cluster** but calls Bedrock in **283744739430** (Aivar Agents).
+Vigilo runs inside the **test cluster** but calls Bedrock in **283744739430** (Aivar Agents).
 
 ### Option A: Cross-Account IAM Role (Recommended)
 ```
@@ -74,10 +74,10 @@ For demo purposes, we can put temporary creds in a K8s secret. Not production-sa
 ## Step 3: Teams Webhook Setup
 
 ### What I Need From You:
-1. Go to any **Microsoft Teams channel** (create one called "kubogent-alerts" or use existing)
+1. Go to any **Microsoft Teams channel** (create one called "vigilo-alerts" or use existing)
 2. Click **⋯ (three dots)** on the channel → **Connectors** (or **Manage channel** → **Connectors**)
 3. Find **Incoming Webhook** → **Configure**
-4. Name: `Kubogent Prophecy`
+4. Name: `Vigilo`
 5. Upload icon (optional)
 6. Click **Create** → **Copy the webhook URL**
 7. Share the URL with me (format: `https://outlook.office.com/webhook/...`)
@@ -86,20 +86,20 @@ That's it. No app registration needed.
 
 ---
 
-## Step 4: Install Kubogent Prophecy (Helm)
+## Step 4: Install Vigilo (Helm)
 
 Once EKS cluster is ready:
 
 ```bash
 # Add helm repo
-helm repo add kubogent https://sriramg-aivar.github.io/kubogent-prophecy
+helm repo add vigilo https://sriramg-aivar.github.io/vigilo
 
 # Install
-helm install prophecy kubogent/prophecy \
-  --namespace kubogent \
+helm install vigilo vigilo/vigilo \
+  --namespace vigilo \
   --create-namespace \
   --set aws.region=us-east-1 \
-  --set aws.bedrockRoleArn=arn:aws:iam::283744739430:role/kubogent-bedrock-access \
+  --set aws.bedrockRoleArn=arn:aws:iam::283744739430:role/vigilo-bedrock-access \
   --set notifications.teamsWebhook="<YOUR_TEAMS_WEBHOOK_URL>" \
   --set schedule.shutdown="0 21 * * *" \
   --set schedule.wakeup="0 9 * * MON-FRI" \
@@ -109,13 +109,13 @@ helm install prophecy kubogent/prophecy \
 
 ### What Gets Deployed:
 ```
-namespace: kubogent
-├── CronJob: prophecy-scan (every 6 hours → predictions)
-├── CronJob: prophecy-shutdown (9 PM daily → scale to zero)
-├── CronJob: prophecy-wakeup (9 AM weekdays → bring back)
-├── ServiceAccount: kubogent-prophecy (with IRSA for Bedrock)
-├── ConfigMap: prophecy-config (thresholds, namespaces)
-└── Secret: prophecy-credentials (Teams webhook, AWS role)
+namespace: vigilo
+├── CronJob: vigilo-scan (every 6 hours → predictions)
+├── CronJob: vigilo-shutdown (9 PM daily → scale to zero)
+├── CronJob: vigilo-wakeup (9 AM weekdays → bring back)
+├── ServiceAccount: vigilo (with IRSA for Bedrock)
+├── ConfigMap: vigilo-config (thresholds, namespaces)
+└── Secret: vigilo-credentials (Teams webhook, AWS role)
 ```
 
 ---
@@ -124,9 +124,9 @@ namespace: kubogent
 
 ### Demo 1: Prediction Scan
 ```
-EKS cluster running → Prophecy scans → AI analyzes → Teams message:
+EKS cluster running → Vigilo scans → AI analyzes → Teams message:
 
-🔮 Kubogent Prophecy — Weekly Report
+🔮 Vigilo — Weekly Report
 Cluster Score: 7.5/10
 ⚠️ 2 warnings detected
 • Node disk at 75%, will reach 90% in 5 days
@@ -175,7 +175,7 @@ CronJob triggers → restores replicas → nodes provision → Teams message:
 │  Test AWS Account (New)                                      │
 │                                                             │
 │  ┌─────────────────────────────────────────────────────┐    │
-│  │  EKS Cluster: kubogent-test                         │    │
+│  │  EKS Cluster: vigilo-test                         │    │
 │  │                                                     │    │
 │  │  namespace: convogent (dummy services)              │    │
 │  │  ├── frontend (nginx, 2 replicas)                   │    │
@@ -185,10 +185,10 @@ CronJob triggers → restores replicas → nodes provision → Teams message:
 │  │  ├── pca-service (nginx, 1 replica)                 │    │
 │  │  └── voice-service (nginx, 3 replicas)              │    │
 │  │                                                     │    │
-│  │  namespace: kubogent (our tool)                     │    │
-│  │  ├── CronJob: prophecy-scan                         │    │
-│  │  ├── CronJob: prophecy-shutdown                     │    │
-│  │  └── CronJob: prophecy-wakeup                       │    │
+│  │  namespace: vigilo (our tool)                     │    │
+│  │  ├── CronJob: vigilo-scan                         │    │
+│  │  ├── CronJob: vigilo-shutdown                     │    │
+│  │  └── CronJob: vigilo-wakeup                       │    │
 │  │                                                     │    │
 │  │  Karpenter (auto-scales nodes)                      │    │
 │  │  KEDA (auto-scales pods)                            │    │
@@ -201,14 +201,14 @@ CronJob triggers → restores replicas → nodes provision → Teams message:
 │  AWS Account: 283744739430 (Aivar Agents)                   │
 │                                                             │
 │  Bedrock: Claude Sonnet 4.5                                 │
-│  (Prophecy calls this for AI predictions)                   │
+│  (Vigilo calls this for AI predictions)                   │
 └─────────────────────────────────────────────────────────────┘
                       │
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Microsoft Teams                                            │
 │                                                             │
-│  Channel: #kubogent-alerts                                  │
+│  Channel: #vigilo-alerts                                  │
 │  • Shutdown notifications                                   │
 │  • Wakeup notifications                                     │
 │  • Critical prediction alerts                               │
@@ -223,7 +223,7 @@ CronJob triggers → restores replicas → nodes provision → Teams message:
 | Day | Task |
 |-----|------|
 | Day 1 | Create test EKS cluster + deploy dummy services |
-| Day 2 | Build Helm chart + deploy Prophecy |
+| Day 2 | Build Helm chart + deploy Vigilo |
 | Day 3 | Test predictions (live cluster) + Teams integration |
 | Day 4 | Test shutdown/wakeup cycle + Teams notifications |
 | Day 5 | Demo to TL + file Warp Speed issue |
@@ -277,12 +277,12 @@ python3 main.py scan --mock --output pdf --output-file report.pdf
 
 ## After Demo: Integrate into Real Convogent
 
-Once demo is successful, integration into real Convogent/Kubogent is just:
+Once demo is successful, integration into real Convogent/Vigilo is just:
 
 ```bash
 # In the real Convogent EKS cluster:
-helm install prophecy kubogent/prophecy \
-  --namespace kubogent \
+helm install vigilo vigilo/vigilo \
+  --namespace vigilo \
   --set scheduler.namespace="convogent" \
   --set notifications.teamsWebhook="<real-team-webhook>"
 ```

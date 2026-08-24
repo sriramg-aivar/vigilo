@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — Prediction Engine
+Vigilo — Prediction Engine
 Feeds cluster metrics to Claude (Bedrock) and generates failure predictions.
 """
 
@@ -8,7 +8,7 @@ import boto3
 from datetime import datetime, timedelta
 
 
-class ProphecyEngine:
+class VigiloEngine:
     """Core prediction engine using AWS Bedrock (Claude)."""
 
     def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"):
@@ -46,7 +46,7 @@ class ProphecyEngine:
         return self._parse_response(response)
 
     def _build_prompt(self, metrics: dict) -> str:
-        return f"""You are Kubogent Prophecy — an AI engine that predicts Kubernetes cluster failures before they happen.
+        return f"""You are Vigilo — an AI engine that predicts Kubernetes cluster failures before they happen.
 
 Analyze the following cluster metrics and predict:
 1. What will FAIL in the next 7 days (with confidence level and estimated time)
@@ -92,7 +92,7 @@ Respond in this exact JSON format:
 Analyze the trends and predict failures. Only include predictions where you have reasonable confidence based on the data."""
 
     def _build_deployment_prompt(self, metrics: dict, deployment_diff: dict) -> str:
-        return f"""You are Kubogent Prophecy — an AI engine that predicts deployment impact on Kubernetes clusters.
+        return f"""You are Vigilo — an AI engine that predicts deployment impact on Kubernetes clusters.
 
 A deployment is about to happen. Analyze:
 1. Current cluster state (metrics below)

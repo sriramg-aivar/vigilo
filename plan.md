@@ -1,8 +1,8 @@
-# Kubogent Prophecy — Project Plan
+# Vigilo — Project Plan
 
 ## What Is This?
 
-**Kubogent Prophecy** is an AI-powered Kubernetes cluster management engine with two core capabilities:
+**Vigilo** is an AI-powered Kubernetes cluster management engine with two core capabilities:
 
 1. **🔮 Failure Prediction** — Predicts cluster failures (disk full, OOM, cert expiry) days before they happen
 2. **⏰ Cluster Scheduler** — Auto scale-to-zero at night (9 PM) → wake up in morning (9 AM), with Teams notifications
@@ -16,12 +16,12 @@ Both features are packaged as a **single CLI/Helm chart** that any team can inst
 ### Problem 1: Incidents Happen Without Warning
 Current monitoring alerts AFTER something breaks. By then, it's 2 AM and someone is on-call firefighting.
 
-**Prophecy Solution:** AI predicts failures 1-7 days in advance. Team gets a weekly report and real-time Teams alerts for critical predictions.
+**Vigilo Solution:** AI predicts failures 1-7 days in advance. Team gets a weekly report and real-time Teams alerts for critical predictions.
 
 ### Problem 2: Non-prod Clusters Waste Money at Night
 Staging, dev, and customer demo clusters run 24/7 but nobody uses them 9 PM – 9 AM. That's 12 hours × $X/hr × every cluster = thousands per month wasted.
 
-**Prophecy Solution:** Automated shutdown at 9 PM (scale all pods to 0, Karpenter removes nodes). Automated wakeup at 9 AM (restore everything, Teams notification confirms it's live).
+**Vigilo Solution:** Automated shutdown at 9 PM (scale all pods to 0, Karpenter removes nodes). Automated wakeup at 9 AM (restore everything, Teams notification confirms it's live).
 
 ---
 
@@ -62,7 +62,7 @@ Shows at any time:
 
 ---
 
-## How It Works with Convogent/Kubogent/Velogent
+## How It Works with Convogent/Vigilo/Velogent
 
 Tested against the Convogent Bank EKS setup:
 
@@ -118,7 +118,7 @@ Cluster: convogent-v2 (Bank EKS)
 
 ### Prediction Scan
 ```
-🔮 Kubogent Prophecy — Scanning cluster...
+🔮 Vigilo — Scanning cluster...
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   📊 Cluster Score: 3.2/10
@@ -166,7 +166,7 @@ Cluster: convogent-v2 (Bank EKS)
 
 ### Shutdown (Dry Run)
 ```
-🌙 Kubogent Prophecy — Initiating cluster shutdown...
+🌙 Vigilo — Initiating cluster shutdown...
 
   1. Save current replica counts to state file
   2. Scale deployments to 0:
@@ -213,7 +213,7 @@ python3 main.py report --email devops@aivar.tech --teams-webhook <URL>
 | Cluster | How to Integrate | Benefit |
 |---------|-----------------|---------|
 | **Convogent (Bank)** | Helm install + CronJob (shutdown 9PM, wakeup 9AM) | Save cost on non-prod, prevent incidents |
-| **Kubogent (customers)** | Part of managed K8s offering | Predictive monitoring as a feature |
+| **Vigilo (customers)** | Part of managed K8s offering | Predictive monitoring as a feature |
 | **Velogent (Azentio)** | Monitor EKS cluster health | Proactive failure detection |
 | **Any EKS cluster** | `pip install` or `helm install` | Universal tool |
 
@@ -237,12 +237,12 @@ python3 main.py report --email devops@aivar.tech --teams-webhook <URL>
 
 ## What's Unique (Nobody Has This)
 
-| What Exists | What Prophecy Does Different |
+| What Exists | What Vigilo Does Different |
 |---|---|
-| CloudWatch alerts after threshold crossed | Prophecy predicts WHEN threshold WILL be crossed |
-| Manual scale-down scripts | Prophecy does state-aware shutdown + wakeup with notifications |
-| kubectl get pods | Prophecy gives AI-analyzed health score with recommendations |
-| Karpenter + KEDA work independently | Prophecy orchestrates them together for scheduled operations |
+| CloudWatch alerts after threshold crossed | Vigilo predicts WHEN threshold WILL be crossed |
+| Manual scale-down scripts | Vigilo does state-aware shutdown + wakeup with notifications |
+| kubectl get pods | Vigilo gives AI-analyzed health score with recommendations |
+| Karpenter + KEDA work independently | Vigilo orchestrates them together for scheduled operations |
 
 ---
 
@@ -269,7 +269,7 @@ python3 main.py report --email devops@aivar.tech --teams-webhook <URL>
 |--------|-------|
 | Size | M (Medium) — solo |
 | AI leverage ×1.5 | ✅ Claude/Bedrock is the prediction brain |
-| Customer-facing ×1.5 | ✅ Kubogent product for customer EKS clusters |
+| Customer-facing ×1.5 | ✅ Vigilo product for customer EKS clusters |
 | Revenue-linked ×1.5 | ✅ Azentio, KoreAI, Bank customers on EKS |
 | **Estimated Points** | **25 × 3.375 = 84.4 pts** |
 
@@ -277,6 +277,6 @@ python3 main.py report --email devops@aivar.tech --teams-webhook <URL>
 
 ## Repo
 
-- **GitHub:** https://github.com/sriramg-aivar/kubogent-prophecy
+- **GitHub:** https://github.com/sriramg-aivar/vigilo
 - **Run:** `python3 main.py scan --mock` (works today, no cluster needed)
 - **Test scheduler:** `python3 main.py shutdown --dry-run`

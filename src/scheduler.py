@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — Cluster Scheduler
+Vigilo — Cluster Scheduler
 Scale cluster to zero at night (9 PM) and bring it back live in morning (9 AM).
 Sends Teams notification on both events.
 
@@ -46,7 +46,7 @@ class ClusterScheduler:
         self.namespace = namespace
         self.teams_webhook = teams_webhook
         self.dry_run = dry_run
-        self.state_file = "/tmp/kubogent-prophecy-state.json"
+        self.state_file = "/tmp/vigilo-state.json"
 
         # System namespaces to NEVER touch
         self.protected_namespaces = [
@@ -64,7 +64,7 @@ class ClusterScheduler:
         Returns:
             Dict with shutdown summary (what was scaled, node count, etc.)
         """
-        print("🌙 Kubogent Prophecy — Initiating cluster shutdown...\n")
+        print("🌙 Vigilo — Initiating cluster shutdown...\n")
 
         if self.dry_run:
             return self._shutdown_dry_run()
@@ -79,7 +79,7 @@ class ClusterScheduler:
         Returns:
             Dict with wakeup summary (what was restored, health status, etc.)
         """
-        print("☀️ Kubogent Prophecy — Waking up cluster...\n")
+        print("☀️ Vigilo — Waking up cluster...\n")
 
         if self.dry_run:
             return self._wakeup_dry_run()
@@ -94,7 +94,7 @@ class ClusterScheduler:
         Returns:
             Dict with full cluster inventory.
         """
-        print("📊 Kubogent Prophecy — Collecting cluster status...\n")
+        print("📊 Vigilo — Collecting cluster status...\n")
 
         if self.dry_run:
             return self._status_mock()

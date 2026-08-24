@@ -1,5 +1,5 @@
 """
-Kubogent Prophecy — Metrics Collector
+Vigilo — Metrics Collector
 Collects cluster metrics from Kubernetes API.
 Currently uses mock data. Will be replaced with real K8s client when cluster access is ready.
 """
