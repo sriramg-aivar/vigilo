@@ -1,47 +1,235 @@
 # 🔮 Kubogent Prophecy
 
-**Predict Kubernetes failures before they happen.**
+**Predict Kubernetes failures before they happen. Auto-manage cluster lifecycle.**
 
-Kubogent Prophecy is an AI-powered engine that runs inside your Kubernetes cluster, analyzes resource trends, and predicts failures days before they occur. Get weekly reports via email and real-time alerts on Microsoft Teams.
+Kubogent Prophecy is an AI-powered engine that:
+1. **Predicts failures** — disk full, OOM kills, cert expiry, scaling limits — days in advance
+2. **Schedules clusters** — auto shutdown at night (9 PM), auto wakeup in morning (9 AM)
+3. **Reports status** — full cluster inventory (nodes, pods, namespaces, Karpenter, KEDA)
+4. **Alerts teams** — Microsoft Teams notifications + email reports
 
----
-
-## What It Does
-
-| Feature | Description |
-|---------|-------------|
-| **Failure Prediction** | Predicts disk full, OOM kills, cert expiry, scaling limits — days in advance |
-| **Deployment Impact** | Before you deploy, know the impact: resource changes, eviction risks, conflicts |
-| **Weekly Reports** | PDF/email report with cluster health score and predictions |
-| **Real-time Alerts** | Microsoft Teams notifications when critical predictions are detected |
-| **CLI Scan** | One command to scan your cluster and see predictions |
+Install via Helm or run as CLI. Works with any EKS cluster.
 
 ---
 
 ## Quick Start
 
-### Option 1: CLI (One-time Scan)
-
 ```bash
 # Clone and install
-git clone https://github.com/aivar-tech/kubogent-prophecy.git
+git clone https://github.com/sriramg-aivar/kubogent-prophecy.git
 cd kubogent-prophecy
 pip install -r requirements.txt
 
-# Scan your cluster (uses current kubeconfig context)
-python main.py scan --kubeconfig ~/.kube/config
+# Predict failures (uses mock data — no cluster needed)
+python3 main.py scan --mock
 
-# Scan with mock data (for testing without cluster access)
-python main.py scan --mock
+# Predict failures (real cluster)
+python3 main.py scan --kubeconfig ~/.kube/config
+
+# Cluster status
+python3 main.py status
+
+# Shutdown cluster (scale to zero)
+python3 main.py shutdown --dry-run                    # preview first
+python3 main.py shutdown --teams-webhook <URL>        # execute + notify
+
+# Wake up cluster
+python3 main.py wakeup --dry-run                     # preview first
+python3 main.py wakeup --teams-webhook <URL>         # execute + notify
+
+# Generate report
+python3 main.py report --email devops@company.com --teams-webhook <URL>
 
 # Predict deployment impact
-python main.py predict-deploy --manifest ./my-deployment.yaml
-
-# Generate and email report
-python main.py report --email devops@company.com --teams-webhook https://outlook.office.com/webhook/xxx
+python3 main.py predict-deploy --manifest deploy.yaml
 ```
 
-### Option 2: Helm Install (Runs Continuously in Cluster)
+---
+
+## Features
+
+### 🔮 AI Failure Prediction
+
+Feeds cluster metrics to Claude (Bedrock) and gets back predictions with:
+- **Time to failure** (hours/days)
+- **Severity** (CRITICAL / WARNING / INFO)
+- **Confidence level** (HIGH / MEDIUM / LOW)
+- **Recommended action** (specific, actionable)
+- **Cluster health score** (0-10)
+
+| Category | What It Predicts |
+|----------|-----------------|
+| 💾 Disk | Node disk filling up (growth rate extrapolation) |
+| 🧠 Memory | Pod approaching OOM kill (memory growth vs limit) |
+| ⚡ CPU | Sustained high CPU, throttling risk |
+| 🔐 Certificates | TLS cert expiring soon (flags non-auto-renewed) |
+| 📈 Scaling | HPA at max replicas, can't scale further |
+| 🔄 Pod Health | Increasing restart count → CrashLoopBackOff coming |
+| 🌐 Scheduling | Resource exhaustion, pods can't be scheduled |
+| 🚀 Deployments | Impact prediction before applying changes |
+
+### ⏰ Cluster Scheduler (Shutdown / Wakeup)
+
+**Shutdown (9 PM):**
+1. Saves current replica counts (state file)
+2. Scales all Deployments to 0
+3. Scales all StatefulSets to 0
+4. Pauses KEDA ScaledObjects (prevents auto-scale-up)
+5. Karpenter removes empty nodes automatically
+6. Sends Teams notification: "✅ Cluster shutdown complete"
+
+**Wakeup (9 AM):**
+1. Loads saved state
+2. Restores all Deployments to original replicas
+3. Restores StatefulSets
+4. Resumes KEDA ScaledObjects
+5. Karpenter provisions nodes (~2 min)
+6. Pods become Ready (~3-5 min)
+7. Sends Teams notification: "✅ Cluster is live"
+
+**Safety:**
+- Never touches `kube-system`, `karpenter`, `cert-manager`, `argocd`, `external-secrets`
+- Saves state before shutdown — always knows how to restore
+- `--dry-run` flag to preview without making changes
+- `--namespace` flag to target specific namespace only
+
+### 📊 Cluster Status
+
+Shows full inventory at any time:
+- Nodes (count, type, status, pods per node)
+- Pods per namespace (running, pending, failed)
+- Deployments count
+- Karpenter nodepools and active nodes
+- KEDA ScaledObjects (active vs paused)
+
+### 📧 Notifications
+
+| Channel | When |
+|---------|------|
+| Microsoft Teams | Shutdown complete, wakeup complete, critical predictions |
+| Email (SES) | Weekly report with health score + predictions |
+| PDF/Markdown | On-demand report generation |
+
+---
+
+## Example Output
+
+### Prediction Scan
+```
+🔮 Kubogent Prophecy — Scanning cluster...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 Cluster Score: 3.2/10
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Cluster has 6 predicted failures within 7 days.
+  Immediate attention needed for disk and memory issues.
+
+  🚨 CRITICAL (3)
+  ────────────────────────────────────────
+
+  [CERT] Manual Certificate Expiration Imminent
+  ⏱  Time to failure: 72 hours
+  📍 Affected: api-gateway-tls (gateway namespace)
+  💡 Action: Immediately renew certificate
+
+  [DISK] Node Disk Space Exhaustion
+  ⏱  Time to failure: ~4 days
+  📍 Affected: ip-10-0-3-91.ec2.internal
+  💡 Action: Expand EBS volume or clean unused images
+
+  [MEMORY] Payment Processor OOM Kill Imminent
+  ⏱  Time to failure: ~18 hours
+  📍 Affected: payment-processor (production)
+  💡 Action: Increase memory limit to 1Gi
+
+  ⚠️  WARNING (3)
+  ────────────────────────────────────────
+
+  [MEMORY] log-aggregator near OOM (96%)
+  [SCALING] HPA at max replicas (4/5, CPU 82%)
+  [MEMORY] Node memory pressure building (90%)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Total: 6 | Critical: 3 | Warning: 3
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Cluster Status
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 Cluster: convogent-production
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  🖥  Nodes: 5 total | 5 ready | 0 not ready
+  ────────────────────────────────────────
+  • core-node-1 (m5.large) — Ready — 12 pods
+  • karpenter-dev-1 (c6a.xlarge) — Ready — 8 pods
+  • karpenter-dev-2 (c6a.xlarge) — Ready — 6 pods
+  • karpenter-voice-1 (c6in.xlarge) — Ready — 3 pods
+  • karpenter-monitoring-1 (t4g.large) — Ready — 9 pods
+
+  📦 Namespaces:
+  ────────────────────────────────────────
+  • convogent: 6 deployments, 14 pods running
+  • monitoring: 4 deployments, 9 pods running
+  • kube-system: 3 deployments, 12 pods running
+
+  🚀 Karpenter: 4 nodes across 6 pools
+  ⚡ KEDA: 6 active / 0 paused ScaledObjects
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Shutdown (Dry Run)
+```
+🌙 Kubogent Prophecy — Initiating cluster shutdown...
+
+  1. Save current replica counts to state file
+  2. Scale deployments to 0:
+     • convogent-frontend (2 → 0)
+     • convogent-backend (2 → 0)
+     • convogent-chat-service (2 → 0)
+     • convogent-eval-service (1 → 0)
+     • convogent-pca-service (1 → 0)
+     • convogent-voice-service (3 → 0)
+  3. Scale StatefulSets to 0: livekit-server (3 → 0)
+  4. Pause KEDA ScaledObjects
+  5. Karpenter removes empty nodes
+  6. Teams notification: 'Cluster shutdown complete'
+```
+
+### Wakeup (Dry Run)
+```
+☀️ Kubogent Prophecy — Waking up cluster...
+
+  1. Load saved state from state file
+  2. Restore deployments to original replicas:
+     • convogent-frontend (0 → 2)
+     • convogent-backend (0 → 2)
+     • convogent-chat-service (0 → 2)
+     • convogent-eval-service (0 → 1)
+     • convogent-pca-service (0 → 1)
+     • convogent-voice-service (0 → 3)
+  3. Restore StatefulSets: livekit-server (0 → 3)
+  4. Resume KEDA ScaledObjects
+  5. Karpenter provisions nodes (~2 min)
+  6. Wait for pods Ready (~3-5 min)
+  7. Teams notification: 'Cluster is live'
+```
+
+---
+
+## Installation
+
+### Option 1: CLI (pip)
+
+```bash
+pip install -r requirements.txt
+python3 main.py scan --kubeconfig ~/.kube/config
+```
+
+### Option 2: Helm Chart (In-Cluster CronJob)
 
 ```bash
 helm repo add kubogent https://aivar-tech.github.io/kubogent-prophecy
@@ -49,9 +237,9 @@ helm install prophecy kubogent/prophecy \
   --namespace kubogent \
   --create-namespace \
   --set aws.region=us-east-1 \
-  --set notifications.email=devops@company.com \
   --set notifications.teamsWebhook="https://outlook.office.com/webhook/xxx" \
-  --set schedule.report="0 9 * * MON" \
+  --set schedule.shutdown="0 21 * * *" \
+  --set schedule.wakeup="0 9 * * MON-FRI" \
   --set schedule.scan="0 */6 * * *"
 ```
 
@@ -66,70 +254,6 @@ docker run --rm \
 
 ---
 
-## What Gets Predicted
-
-| Category | Examples |
-|----------|----------|
-| 💾 **Disk** | Node disk filling up (growth rate extrapolation) |
-| 🧠 **Memory** | Pod approaching OOM (memory growth vs limit) |
-| ⚡ **CPU** | Sustained high CPU, throttling risk |
-| 🔐 **Certificates** | TLS cert expiring soon |
-| 📈 **Scaling** | HPA at max replicas, can't scale further |
-| 🔄 **Pod Health** | Increasing restart count, CrashLoopBackOff trend |
-| 🌐 **Network** | Failed scheduling due to resource exhaustion |
-| 🚀 **Deployments** | Impact prediction before applying changes |
-
----
-
-## Example Output
-
-```
-🔮 Kubogent Prophecy — Scanning cluster...
-
-📊 Using cluster: aivar-production-eks
-🧠 Analyzing trends with AI...
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  📊 Cluster Score: 5.8/10
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-  Cluster has 3 predicted failures within 7 days.
-  Immediate attention needed for disk and memory issues.
-
-  🚨 CRITICAL (2)
-  ────────────────────────────────────────
-
-  [DISK] Node disk will reach capacity
-  ⏱  Time to failure: ~4 days
-  📍 Affected: ip-10-0-3-91.ec2.internal
-  📈 Current: 84% → Threshold: 95%
-  🎯 Confidence: HIGH
-  💡 Action: Expand EBS volume or clean unused images
-
-  [MEMORY] Pod OOM kill imminent
-  ⏱  Time to failure: ~18 hours
-  📍 Affected: log-aggregator (monitoring namespace)
-  📈 Current: 490Mi/512Mi (96%) → Growing 3Mi/hour
-  🎯 Confidence: HIGH
-  💡 Action: Increase memory limit to 1Gi
-
-  ⚠️  WARNING (1)
-  ────────────────────────────────────────
-
-  [CERT] TLS certificate expiring
-  ⏱  Time to failure: 3 days
-  📍 Affected: api-gateway-tls (gateway namespace)
-  📈 Current: expires 2026-08-27
-  🎯 Confidence: HIGH
-  💡 Action: Manually renew certificate (auto-renew not configured)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  Total: 3 predictions | Critical: 2 | Warning: 1
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-```
-
----
-
 ## Configuration
 
 ### Environment Variables
@@ -137,31 +261,37 @@ docker run --rm \
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AWS_DEFAULT_REGION` | Yes | AWS region for Bedrock (default: us-east-1) |
-| `AWS_ACCESS_KEY_ID` | Yes* | AWS credentials (*or use IAM role/instance profile) |
+| `AWS_ACCESS_KEY_ID` | Yes* | AWS credentials (*or use IAM role) |
 | `AWS_SECRET_ACCESS_KEY` | Yes* | AWS credentials |
 | `KUBECONFIG` | No | Path to kubeconfig (default: ~/.kube/config) |
-| `PROPHECY_MODEL_ID` | No | Bedrock model (default: anthropic.claude-sonnet-4-20250514) |
-| `SES_SENDER` | No | Email sender address (for email reports) |
-| `TEAMS_WEBHOOK_URL` | No | Microsoft Teams webhook (for real-time alerts) |
+| `PROPHECY_MODEL_ID` | No | Bedrock model (default: us.anthropic.claude-sonnet-4-20250514-v1:0) |
+| `TEAMS_WEBHOOK_URL` | No | Microsoft Teams webhook URL |
+| `SES_SENDER` | No | Email sender (for reports) |
 
 ### Helm Values
 
 ```yaml
-# values.yaml
 aws:
   region: us-east-1
 
 notifications:
+  teamsWebhook: "https://outlook.office.com/webhook/your-url"
   email: devops@yourcompany.com
-  teamsWebhook: "https://outlook.office.com/webhook/your-webhook-url"
 
 schedule:
-  # Full report (weekly, Monday 9 AM)
-  report: "0 9 * * MON"
-  # Quick scan (every 6 hours)
-  scan: "0 */6 * * *"
-  # Alert check (every hour)
-  alert: "0 * * * *"
+  shutdown: "0 21 * * *"          # 9 PM daily
+  wakeup: "0 9 * * MON-FRI"      # 9 AM weekdays only
+  scan: "0 */6 * * *"            # Every 6 hours
+  report: "0 9 * * MON"          # Weekly Monday 9 AM
+
+scheduler:
+  namespace: "convogent"           # Target namespace (empty = all app namespaces)
+  protectedNamespaces:
+    - kube-system
+    - karpenter
+    - cert-manager
+    - argocd
+    - external-secrets
 
 thresholds:
   disk_warn_percent: 80
@@ -170,89 +300,86 @@ thresholds:
   memory_critical_percent: 95
   cert_warn_days: 14
   cert_critical_days: 7
-
-bedrock:
-  modelId: "anthropic.claude-sonnet-4-20250514"
-  maxTokens: 4096
 ```
-
----
-
-## Integrations
-
-### Microsoft Teams
-
-1. Go to your Teams channel → Connectors → Incoming Webhook
-2. Name it "Kubogent Prophecy" → Copy webhook URL
-3. Pass as `--teams-webhook` or set `TEAMS_WEBHOOK_URL`
-
-### Email (AWS SES)
-
-1. Verify sender email in SES
-2. Set `SES_SENDER` environment variable
-3. Pass recipients via `--email`
-
-### Outlook (Microsoft Graph)
-
-For direct Outlook integration (without SES):
-- See [docs/outlook-setup.md](docs/outlook-setup.md)
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────┐
-│            Your EKS Cluster                      │
-│                                                  │
-│  ┌──────────────────────────────────────┐       │
-│  │   Kubogent Prophecy (CronJob/Pod)    │       │
-│  │                                      │       │
-│  │  ┌─────────────┐ ┌──────────────┐   │       │
-│  │  │  Collector  │ │   Predictor  │   │       │
-│  │  │ (K8s API)   │→│  (Bedrock)   │   │       │
-│  │  └─────────────┘ └──────┬───────┘   │       │
-│  │                          │           │       │
-│  │               ┌──────────┴────────┐  │       │
-│  │               │     Reporter      │  │       │
-│  │               └──┬─────────┬──────┘  │       │
-│  └──────────────────┼─────────┼─────────┘       │
-│                     │         │                  │
-└─────────────────────┼─────────┼──────────────────┘
-                      │         │
-                      ▼         ▼
-               ┌──────────┐ ┌──────────┐
-               │  Email   │ │  Teams   │
-               │  (SES)   │ │ (Webhook)│
-               └──────────┘ └──────────┘
+┌─────────────────────────────────────────────────────┐
+│              Your EKS Cluster                        │
+│                                                     │
+│  ┌───────────────────────────────────────────┐      │
+│  │     Kubogent Prophecy (CronJob/Pod)       │      │
+│  │                                           │      │
+│  │  ┌────────────┐  ┌────────────────────┐   │      │
+│  │  │ Collector  │  │    Predictor       │   │      │
+│  │  │ (K8s API)  │→ │ (Bedrock/Claude)   │   │      │
+│  │  └────────────┘  └─────────┬──────────┘   │      │
+│  │                            │              │      │
+│  │  ┌────────────┐  ┌────────┴───────────┐   │      │
+│  │  │ Scheduler  │  │     Reporter       │   │      │
+│  │  │ (shutdown/ │  │ (Teams/Email/PDF)  │   │      │
+│  │  │  wakeup)   │  └────────┬───────────┘   │      │
+│  │  └─────┬──────┘           │              │      │
+│  └────────┼──────────────────┼──────────────┘      │
+│           │                  │                     │
+│           ▼                  ▼                     │
+│  ┌────────────────┐  ┌──────────────┐             │
+│  │ Deployments    │  │   Karpenter  │             │
+│  │ StatefulSets   │  │   (nodes)    │             │
+│  │ KEDA           │  │              │             │
+│  └────────────────┘  └──────────────┘             │
+└─────────────────────────────────────────────────────┘
+              │                  │
+              ▼                  ▼
+       ┌──────────┐      ┌──────────┐
+       │  Teams   │      │  Email   │
+       │(Webhook) │      │  (SES)   │
+       └──────────┘      └──────────┘
 ```
 
 ---
 
 ## How Predictions Work
 
-1. **Collect** — Pulls live metrics from K8s API (nodes, pods, events, certs, HPA)
-2. **Trend** — Calculates growth rates and trajectories over time
-3. **Predict** — Feeds metrics + trends to Claude (Bedrock) for AI analysis
-4. **Report** — Generates predictions with confidence levels, severity, and actions
-5. **Alert** — Sends critical predictions to Teams/Email immediately
-
-The AI doesn't just check thresholds — it understands:
-- Growth patterns (linear, exponential)
-- Correlated failures (deployment → OOM → cascade)
-- Historical context (similar events in the past)
-- Blast radius (what else breaks if this fails)
+1. **Collect** — Pull live metrics from K8s API (nodes, pods, events, certs, HPA, KEDA)
+2. **Trend** — Calculate growth rates and trajectories
+3. **Predict** — Feed to Claude (Bedrock) for AI analysis
+4. **Score** — Generate cluster health score (0-10) with confidence levels
+5. **Alert** — Send critical predictions to Teams/email immediately
+6. **Report** — Weekly PDF with all predictions and actions
 
 ---
 
-## Prerequisites
+## Cluster Scheduler: How It Saves Money
 
-| Requirement | Purpose |
-|-------------|---------|
-| AWS Account with Bedrock access | Claude for predictions |
-| EKS cluster (or any K8s cluster) | Metrics source |
-| Python 3.10+ | Runtime |
-| kubectl configured | Cluster access |
+| Time | What Happens | Nodes | Cost |
+|------|-------------|-------|------|
+| 9 AM | Wakeup → all pods restored, Karpenter provisions nodes | 5 | Full |
+| 9 PM | Shutdown → all pods scaled to 0, nodes terminate | 1 (core only) | ~80% savings |
+
+**Example savings (Convogent Bank cluster):**
+- 4 Karpenter nodes × ~$0.60/hr = $2.40/hr
+- 12 hours/night × $2.40 = **$28.80/night**
+- 30 days = **$864/month saved per cluster**
+
+For 3 non-prod clusters = **$2,592/month saved**
+
+---
+
+## Compatibility
+
+| Component | Supported |
+|-----------|-----------|
+| EKS | ✅ (primary target) |
+| Karpenter | ✅ (auto node removal on shutdown) |
+| KEDA | ✅ (pause/resume ScaledObjects) |
+| HPA | ✅ (tracked in predictions) |
+| ArgoCD | ✅ (protected namespace, not touched) |
+| cert-manager | ✅ (protected namespace) |
+| Any K8s cluster | ✅ (predictions work everywhere) |
 
 ---
 
@@ -260,14 +387,19 @@ The AI doesn't just check thresholds — it understands:
 
 ```bash
 # Clone
-git clone https://github.com/aivar-tech/kubogent-prophecy.git
+git clone https://github.com/sriramg-aivar/kubogent-prophecy.git
 cd kubogent-prophecy
 
-# Install dependencies
+# Install
 pip install -r requirements.txt
 
-# Run with mock data (no cluster needed)
-python main.py scan --mock
+# Test prediction (no cluster needed)
+python3 main.py scan --mock
+
+# Test scheduler (no cluster needed)
+python3 main.py shutdown --dry-run
+python3 main.py wakeup --dry-run
+python3 main.py status
 
 # Run tests
 pytest tests/
@@ -279,12 +411,24 @@ pytest tests/
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| v0.1 | Prediction engine + mock data + CLI | ✅ Done |
+| v0.1 | Prediction engine + CLI + scheduler + Teams | ✅ Done |
 | v0.2 | Real K8s cluster integration | 🔄 Next |
-| v0.3 | Email + Teams notifications | 🔄 Next |
-| v0.4 | Helm chart for in-cluster deployment | Planned |
+| v0.3 | Helm chart + CronJob deployment | Planned |
+| v0.4 | Email reports (SES) + PDF | Planned |
 | v0.5 | Deployment impact prediction | Planned |
-| v1.0 | Production-ready release | Planned |
+| v1.0 | Production release | Planned |
+
+---
+
+## Prerequisites
+
+| Requirement | Purpose |
+|-------------|---------|
+| Python 3.10+ | Runtime |
+| AWS Bedrock access | Claude for predictions |
+| EKS cluster | Metrics source + scheduler target |
+| kubectl configured | Cluster access |
+| Teams webhook (optional) | Notifications |
 
 ---
 
