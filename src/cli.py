@@ -10,6 +10,7 @@ from datetime import datetime
 from src.predictor import ProphecyEngine
 from src.collector import MetricsCollector
 from src.reporter import ReportGenerator
+from src.scheduler import ClusterScheduler
 
 
 def main():
@@ -46,6 +47,29 @@ def main():
     report_parser.add_argument("--region", type=str, default="us-east-1", help="AWS region")
     report_parser.add_argument("--mock", action="store_true", help="Use mock data")
 
+    # --- shutdown command ---
+    shutdown_parser = subparsers.add_parser("shutdown", help="Scale cluster to zero (night mode)")
+    shutdown_parser.add_argument("--kubeconfig", type=str, default=None, help="Path to kubeconfig file")
+    shutdown_parser.add_argument("--context", type=str, default=None, help="K8s context to use")
+    shutdown_parser.add_argument("--namespace", type=str, default=None, help="Target namespace (default: all app namespaces)")
+    shutdown_parser.add_argument("--teams-webhook", type=str, help="Microsoft Teams incoming webhook URL")
+    shutdown_parser.add_argument("--dry-run", action="store_true", help="Show what would happen without making changes")
+
+    # --- wakeup command ---
+    wakeup_parser = subparsers.add_parser("wakeup", help="Bring cluster back to life (morning mode)")
+    wakeup_parser.add_argument("--kubeconfig", type=str, default=None, help="Path to kubeconfig file")
+    wakeup_parser.add_argument("--context", type=str, default=None, help="K8s context to use")
+    wakeup_parser.add_argument("--namespace", type=str, default=None, help="Target namespace")
+    wakeup_parser.add_argument("--teams-webhook", type=str, help="Microsoft Teams incoming webhook URL")
+    wakeup_parser.add_argument("--dry-run", action="store_true", help="Show what would happen without making changes")
+
+    # --- status command ---
+    status_parser = subparsers.add_parser("status", help="Show cluster inventory (nodes, pods, deployments)")
+    status_parser.add_argument("--kubeconfig", type=str, default=None, help="Path to kubeconfig file")
+    status_parser.add_argument("--context", type=str, default=None, help="K8s context to use")
+    status_parser.add_argument("--namespace", type=str, default=None, help="Target namespace")
+    status_parser.add_argument("--output", type=str, choices=["terminal", "json"], default="terminal", help="Output format")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -58,6 +82,12 @@ def main():
         run_predict_deploy(args)
     elif args.command == "report":
         run_report(args)
+    elif args.command == "shutdown":
+        run_shutdown(args)
+    elif args.command == "wakeup":
+        run_wakeup(args)
+    elif args.command == "status":
+        run_status(args)
 
 
 def run_scan(args):
@@ -244,6 +274,73 @@ def print_deployment_impact(impact: dict):
 
 if __name__ == "__main__":
     main()
+
+
+def run_shutdown(args):
+    """Scale cluster to zero."""
+    scheduler = ClusterScheduler(
+        kubeconfig=args.kubeconfig,
+        context=args.context,
+        namespace=args.namespace,
+        teams_webhook=args.teams_webhook,
+        dry_run=args.dry_run
+    )
+    scheduler.shutdown()
+
+
+def run_wakeup(args):
+    """Bring cluster back to life."""
+    scheduler = ClusterScheduler(
+        kubeconfig=args.kubeconfig,
+        context=args.context,
+        namespace=args.namespace,
+        teams_webhook=args.teams_webhook,
+        dry_run=args.dry_run
+    )
+    scheduler.wakeup()
+
+
+def run_status(args):
+    """Show cluster inventory."""
+    scheduler = ClusterScheduler(
+        kubeconfig=args.kubeconfig,
+        context=args.context,
+        namespace=args.namespace,
+        dry_run=True
+    )
+    status = scheduler.status()
+
+    if args.output == "json":
+        print(json.dumps(status, indent=2))
+    else:
+        print_cluster_status(status)
+
+
+def print_cluster_status(status: dict):
+    """Pretty print cluster status."""
+    nodes = status.get("nodes", {})
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"  📊 Cluster: {status.get('cluster', 'Unknown')}")
+    print(f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+
+    print(f"  🖥  Nodes: {nodes.get('total', 0)} total | {nodes.get('ready', 0)} ready | {nodes.get('not_ready', 0)} not ready")
+    print(f"  {'─' * 40}")
+    for n in nodes.get("details", []):
+        print(f"  • {n['name']} ({n['type']}) — {n['status']} — {n['pods']} pods")
+
+    print(f"\n  📦 Namespaces:")
+    print(f"  {'─' * 40}")
+    for ns, data in status.get("namespaces", {}).items():
+        pods = data.get("pods_running", 0)
+        deploys = data.get("deployments", 0)
+        print(f"  • {ns}: {deploys} deployments, {pods} pods running")
+
+    karpenter = status.get("karpenter", {})
+    print(f"\n  🚀 Karpenter: {karpenter.get('active_nodes', 0)} nodes across {karpenter.get('nodepools', 0)} pools")
+
+    keda = status.get("keda", {})
+    print(f"  ⚡ KEDA: {keda.get('active', 0)} active / {keda.get('paused', 0)} paused ScaledObjects")
+    print(f"\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
 
 
 def _sample_predictions() -> dict:
