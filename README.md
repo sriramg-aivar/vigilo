@@ -1,12 +1,11 @@
 # 🔮 Vigilo
 
-**Predict Kubernetes failures before they happen. Auto-manage cluster lifecycle.**
+**Predict Kubernetes failures before they happen.**
 
 Vigilo is an AI-powered engine that:
 1. **Predicts failures** — disk full, OOM kills, cert expiry, scaling limits — days in advance
-2. **Schedules clusters** — auto shutdown at night (9 PM), auto wakeup in morning (9 AM)
-3. **Reports status** — full cluster inventory (nodes, pods, namespaces, Karpenter, KEDA)
-4. **Alerts teams** — Microsoft Teams notifications + email reports
+2. **Reports status** — full cluster inventory (nodes, pods, namespaces, Karpenter, KEDA)
+3. **Alerts teams** — Microsoft Teams notifications with Error/Fix/Prevent format
 
 Install via Helm or run as CLI. Works with any EKS cluster.
 
@@ -28,14 +27,6 @@ python3 main.py scan --kubeconfig ~/.kube/config
 
 # Cluster status
 python3 main.py status
-
-# Shutdown cluster (scale to zero)
-python3 main.py shutdown --dry-run                    # preview first
-python3 main.py shutdown --teams-webhook <URL>        # execute + notify
-
-# Wake up cluster
-python3 main.py wakeup --dry-run                     # preview first
-python3 main.py wakeup --teams-webhook <URL>         # execute + notify
 
 # Generate report
 python3 main.py report --email devops@company.com --teams-webhook <URL>
@@ -68,31 +59,6 @@ Feeds cluster metrics to Claude (Bedrock) and gets back predictions with:
 | 🌐 Scheduling | Resource exhaustion, pods can't be scheduled |
 | 🚀 Deployments | Impact prediction before applying changes |
 
-### ⏰ Cluster Scheduler (Shutdown / Wakeup)
-
-**Shutdown (9 PM):**
-1. Saves current replica counts (state file)
-2. Scales all Deployments to 0
-3. Scales all StatefulSets to 0
-4. Pauses KEDA ScaledObjects (prevents auto-scale-up)
-5. Karpenter removes empty nodes automatically
-6. Sends Teams notification: "✅ Cluster shutdown complete"
-
-**Wakeup (9 AM):**
-1. Loads saved state
-2. Restores all Deployments to original replicas
-3. Restores StatefulSets
-4. Resumes KEDA ScaledObjects
-5. Karpenter provisions nodes (~2 min)
-6. Pods become Ready (~3-5 min)
-7. Sends Teams notification: "✅ Cluster is live"
-
-**Safety:**
-- Never touches `kube-system`, `karpenter`, `cert-manager`, `argocd`, `external-secrets`
-- Saves state before shutdown — always knows how to restore
-- `--dry-run` flag to preview without making changes
-- `--namespace` flag to target specific namespace only
-
 ### 📊 Cluster Status
 
 Shows full inventory at any time:
@@ -106,7 +72,7 @@ Shows full inventory at any time:
 
 | Channel | When |
 |---------|------|
-| Microsoft Teams | Shutdown complete, wakeup complete, critical predictions |
+| Microsoft Teams | Critical predictions, health reports (Error/Fix/Prevent format) |
 | Email (SES) | Weekly report with health score + predictions |
 | PDF/Markdown | On-demand report generation |
 
@@ -181,43 +147,6 @@ Shows full inventory at any time:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-### Shutdown (Dry Run)
-```
-🌙 Vigilo — Initiating cluster shutdown...
-
-  1. Save current replica counts to state file
-  2. Scale deployments to 0:
-     • convogent-frontend (2 → 0)
-     • convogent-backend (2 → 0)
-     • convogent-chat-service (2 → 0)
-     • convogent-eval-service (1 → 0)
-     • convogent-pca-service (1 → 0)
-     • convogent-voice-service (3 → 0)
-  3. Scale StatefulSets to 0: livekit-server (3 → 0)
-  4. Pause KEDA ScaledObjects
-  5. Karpenter removes empty nodes
-  6. Teams notification: 'Cluster shutdown complete'
-```
-
-### Wakeup (Dry Run)
-```
-☀️ Vigilo — Waking up cluster...
-
-  1. Load saved state from state file
-  2. Restore deployments to original replicas:
-     • convogent-frontend (0 → 2)
-     • convogent-backend (0 → 2)
-     • convogent-chat-service (0 → 2)
-     • convogent-eval-service (0 → 1)
-     • convogent-pca-service (0 → 1)
-     • convogent-voice-service (0 → 3)
-  3. Restore StatefulSets: livekit-server (0 → 3)
-  4. Resume KEDA ScaledObjects
-  5. Karpenter provisions nodes (~2 min)
-  6. Wait for pods Ready (~3-5 min)
-  7. Teams notification: 'Cluster is live'
-```
-
 ---
 
 ## Installation
@@ -238,9 +167,8 @@ helm install vigilo vigilo/vigilo \
   --create-namespace \
   --set aws.region=us-east-1 \
   --set notifications.teamsWebhook="https://outlook.office.com/webhook/xxx" \
-  --set schedule.shutdown="0 21 * * *" \
-  --set schedule.wakeup="0 9 * * MON-FRI" \
-  --set schedule.scan="0 */6 * * *"
+  --set schedule.scan="0 */6 * * *" \
+  --set schedule.report="0 9 * * MON"
 ```
 
 ### Option 3: Docker
@@ -279,19 +207,8 @@ notifications:
   email: devops@yourcompany.com
 
 schedule:
-  shutdown: "0 21 * * *"          # 9 PM daily
-  wakeup: "0 9 * * MON-FRI"      # 9 AM weekdays only
   scan: "0 */6 * * *"            # Every 6 hours
   report: "0 9 * * MON"          # Weekly Monday 9 AM
-
-scheduler:
-  namespace: "convogent"           # Target namespace (empty = all app namespaces)
-  protectedNamespaces:
-    - kube-system
-    - karpenter
-    - cert-manager
-    - argocd
-    - external-secrets
 
 thresholds:
   disk_warn_percent: 80
@@ -311,33 +228,31 @@ thresholds:
 │              Your EKS Cluster                        │
 │                                                     │
 │  ┌───────────────────────────────────────────┐      │
-│  │     Vigilo (CronJob/Pod)       │      │
+│  │        Vigilo (CronJob/Pod)               │      │
 │  │                                           │      │
 │  │  ┌────────────┐  ┌────────────────────┐   │      │
 │  │  │ Collector  │  │    Predictor       │   │      │
 │  │  │ (K8s API)  │→ │ (Bedrock/Claude)   │   │      │
 │  │  └────────────┘  └─────────┬──────────┘   │      │
 │  │                            │              │      │
-│  │  ┌────────────┐  ┌────────┴───────────┐   │      │
-│  │  │ Scheduler  │  │     Reporter       │   │      │
-│  │  │ (shutdown/ │  │ (Teams/Email/PDF)  │   │      │
-│  │  │  wakeup)   │  └────────┬───────────┘   │      │
-│  │  └─────┬──────┘           │              │      │
-│  └────────┼──────────────────┼──────────────┘      │
-│           │                  │                     │
-│           ▼                  ▼                     │
-│  ┌────────────────┐  ┌──────────────┐             │
-│  │ Deployments    │  │   Karpenter  │             │
-│  │ StatefulSets   │  │   (nodes)    │             │
-│  │ KEDA           │  │              │             │
-│  └────────────────┘  └──────────────┘             │
+│  │                   ┌────────┴───────────┐   │      │
+│  │                   │     Reporter       │   │      │
+│  │                   │ (Teams/Email/PDF)  │   │      │
+│  │                   └────────┬───────────┘   │      │
+│  └────────────────────────────┼──────────────┘      │
+│                               │                     │
+│                               ▼                     │
+│                      ┌──────────────┐               │
+│                      │   Karpenter  │               │
+│                      │   (nodes)    │               │
+│                      └──────────────┘               │
 └─────────────────────────────────────────────────────┘
-              │                  │
-              ▼                  ▼
-       ┌──────────┐      ┌──────────┐
-       │  Teams   │      │  Email   │
-       │(Webhook) │      │  (SES)   │
-       └──────────┘      └──────────┘
+                               │
+                               ▼
+                    ┌──────────────────┐
+                    │  Teams / Email   │
+                    │  (Notifications) │
+                    └──────────────────┘
 ```
 
 ---
@@ -353,19 +268,43 @@ thresholds:
 
 ---
 
-## Cluster Scheduler: How It Saves Money
+## Scripts
 
-| Time | What Happens | Nodes | Cost |
-|------|-------------|-------|------|
-| 9 AM | Wakeup → all pods restored, Karpenter provisions nodes | 5 | Full |
-| 9 PM | Shutdown → all pods scaled to 0, nodes terminate | 1 (core only) | ~80% savings |
+| Script | Purpose |
+|--------|---------|
+| `setup.sh` | Create/resume EKS test cluster + deploy dummy services |
+| `scale-to-zero.sh` | Scale all node groups to 0 (cost savings for non-prod) |
+| `destroy.sh` | Tear down the test cluster |
 
-**Example savings (Convogent Bank cluster):**
-- 4 Karpenter nodes × ~$0.60/hr = $2.40/hr
-- 12 hours/night × $2.40 = **$28.80/night**
-- 30 days = **$864/month saved per cluster**
+```bash
+# Set up the test cluster
+./setup.sh
 
-For 3 non-prod clusters = **$2,592/month saved**
+# Scale to zero at night (saves ~$28/night per cluster)
+./scale-to-zero.sh
+
+# Bring it back
+./setup.sh
+```
+
+---
+
+## CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `scan` | Run AI failure prediction scan |
+| `predict-deploy` | Predict impact of a deployment manifest before applying |
+| `report` | Generate health report (email + Teams) |
+| `status` | Show full cluster inventory |
+
+```bash
+python3 main.py scan --mock                           # test without cluster
+python3 main.py scan --kubeconfig ~/.kube/config      # real cluster
+python3 main.py predict-deploy --manifest deploy.yaml # deployment impact
+python3 main.py report --teams-webhook <URL>          # generate report
+python3 main.py status                                # cluster inventory
+```
 
 ---
 
@@ -374,11 +313,11 @@ For 3 non-prod clusters = **$2,592/month saved**
 | Component | Supported |
 |-----------|-----------|
 | EKS | ✅ (primary target) |
-| Karpenter | ✅ (auto node removal on shutdown) |
-| KEDA | ✅ (pause/resume ScaledObjects) |
+| Karpenter | ✅ (tracked in predictions) |
+| KEDA | ✅ (tracked in predictions) |
 | HPA | ✅ (tracked in predictions) |
-| ArgoCD | ✅ (protected namespace, not touched) |
-| cert-manager | ✅ (protected namespace) |
+| ArgoCD | ✅ (compatible) |
+| cert-manager | ✅ (cert expiry predictions) |
 | Any K8s cluster | ✅ (predictions work everywhere) |
 
 ---
@@ -396,9 +335,7 @@ pip install -r requirements.txt
 # Test prediction (no cluster needed)
 python3 main.py scan --mock
 
-# Test scheduler (no cluster needed)
-python3 main.py shutdown --dry-run
-python3 main.py wakeup --dry-run
+# Cluster status
 python3 main.py status
 
 # Run tests
@@ -411,7 +348,7 @@ pytest tests/
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| v0.1 | Prediction engine + CLI + scheduler + Teams | ✅ Done |
+| v0.1 | Prediction engine + CLI + Teams | ✅ Done |
 | v0.2 | Real K8s cluster integration | 🔄 Next |
 | v0.3 | Helm chart + CronJob deployment | Planned |
 | v0.4 | Email reports (SES) + PDF | Planned |
@@ -426,7 +363,7 @@ pytest tests/
 |-------------|---------|
 | Python 3.10+ | Runtime |
 | AWS Bedrock access | Claude for predictions |
-| EKS cluster | Metrics source + scheduler target |
+| EKS cluster | Metrics source |
 | kubectl configured | Cluster access |
 | Teams webhook (optional) | Notifications |
 
