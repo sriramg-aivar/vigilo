@@ -1,219 +1,282 @@
 # 🔮 Vigilo — Setup & Run Guide
 
-## What We Need
-
-| # | Requirement | Purpose | Status |
-|---|------------|---------|--------|
-| 1 | **AWS Account (EKS)** | EKS cluster for testing | ❓ Need to create |
-| 2 | **AWS Bedrock Access** (Account: 283744739430) | Claude Sonnet 4 for predictions | ✅ Have it |
-| 3 | **Microsoft Teams Webhook URL** | Send prediction alerts (Error/Fix/Prevent) | ❓ Need from you |
-| 4 | **Outlook/Email** (optional) | Weekly PDF report delivery | ❓ Need SES sender or SMTP |
+Complete step-by-step guide: from zero to predictions arriving in Teams.
 
 ---
 
-## Step 1: Create Test EKS Cluster
+## Prerequisites
+
+| Requirement | Purpose |
+|-------------|---------|
+| AWS credentials (Cloud Migration: 880335327306) | EKS cluster + kubectl |
+| AWS Bedrock access (Aivar Agents: 283744739430) | Claude Sonnet 4 for AI predictions |
+| Microsoft Teams webhook URL | Receive alerts and reports |
+| macOS/Linux terminal | Run setup scripts |
+
+---
+
+## Step 1: Export AWS Credentials
 
 ```bash
-# Set up cluster + deploy dummy services (one command)
+# Cloud Migration account (EKS cluster lives here)
+export AWS_ACCESS_KEY_ID=<your-key>
+export AWS_SECRET_ACCESS_KEY=<your-secret>
+export AWS_DEFAULT_REGION=us-east-1
+```
+
+These credentials need permissions for:
+- CloudFormation (create VPC, EKS)
+- EKS (create cluster, node groups)
+- EC2 (networking, security groups)
+- IAM (service roles)
+
+---
+
+## Step 2: Set Up Teams Webhook (Power Automate)
+
+Microsoft retired the old "Incoming Webhook" connector. Use **Power Automate workflow** instead:
+
+### Create the Workflow
+
+1. Open **Microsoft Teams**
+2. Go to the channel where you want alerts (e.g., create `#vigilo-alerts`)
+3. Click **⋯ (three dots)** on the channel → **Workflows**
+4. Search for **"Post to a channel when a webhook request is received"**
+5. Click it → **Set up workflow**
+6. Select the Team and Channel
+7. Click **Add workflow**
+8. Copy the webhook URL (format: `https://prod-XX.westus.logic.azure.com/workflows/...`)
+
+### Set the Webhook
+
+```bash
+export TEAMS_WEBHOOK_URL="https://prod-XX.westus.logic.azure.com/workflows/..."
+```
+
+### Test It (Optional)
+
+```bash
+curl -X POST "$TEAMS_WEBHOOK_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"type":"message","attachments":[{"contentType":"application/vnd.microsoft.card.adaptive","content":{"type":"AdaptiveCard","$schema":"http://adaptivecards.io/schemas/adaptive-card.json","version":"1.4","body":[{"type":"TextBlock","text":"✅ Vigilo webhook test successful!","weight":"Bolder"}]}}]}'
+```
+
+You should see the message appear in your Teams channel.
+
+---
+
+## Step 3: Run setup.sh
+
+```bash
 ./setup.sh
 ```
 
-This creates:
-- EKS cluster (`vigilo-test`) in us-east-1
-- 2x t3.medium nodes
-- Namespace `convogent` with 6 dummy services
-- Updates kubeconfig so `kubectl` works on your Mac
+This single command does everything:
+1. Creates a VPC (CloudFormation)
+2. Creates an EKS cluster with managed node groups
+3. Updates your local kubeconfig (so `kubectl` works)
+4. Deploys dummy services (to have something to scan)
+5. Installs Vigilo Helm chart (CronJobs for scan + report)
+
+**Expected time:** ~15-20 minutes (EKS cluster creation takes time)
+
+### What Gets Created
+
+```
+AWS Resources:
+├── VPC + subnets + security groups (CloudFormation)
+├── EKS cluster: vigilo-test
+├── Node group: 2x t3.medium nodes
+└── IAM roles (cluster role, node role, IRSA)
+
+Kubernetes:
+├── namespace: convogent (dummy services for scanning)
+├── namespace: vigilo
+│   ├── CronJob: vigilo-scan (every 6 hours)
+│   ├── CronJob: vigilo-report (Monday 9 AM)
+│   ├── ServiceAccount: vigilo (IRSA for Bedrock)
+│   ├── ConfigMap: vigilo-config
+│   └── Secret: vigilo-credentials (Teams webhook)
+```
 
 ---
 
-## Step 2: Cross-Account Bedrock Access
-
-Vigilo runs inside the **EKS cluster** but calls Bedrock in **283744739430** (Aivar Agents).
-
-### Option A: Cross-Account IAM Role (Recommended)
-```
-EKS Pod (IRSA) → assumes role → 283744739430 Bedrock
-```
-
-Setup:
-1. IAM role in 283744739430 with `bedrock:InvokeModel` permission
-2. Trust policy allowing the EKS account's Vigilo service account to assume it
-3. Pod uses IRSA (IAM Roles for Service Accounts) to get creds
-
-### Option B: Static Credentials (Quick for Demo)
-```
-EKS Pod → uses AWS creds from K8s Secret → 283744739430 Bedrock
-```
-
-For demo purposes — put temporary creds in a K8s secret. Not production-safe.
-
----
-
-## Step 3: Teams Webhook Setup
-
-1. Go to any **Microsoft Teams channel** (create one called "vigilo-alerts" or use existing)
-2. Click **⋯ (three dots)** on the channel → **Connectors** → **Incoming Webhook** → **Configure**
-3. Name: `Vigilo`
-4. Click **Create** → **Copy the webhook URL**
-5. Share the URL (format: `https://outlook.office.com/webhook/...`)
-
----
-
-## Step 4: Run Vigilo
-
-### Daily Flow
+## Step 4: Verify It's Working
 
 ```bash
-# 1. Set up cluster (or resume if scaled to zero)
+# Check cluster is accessible
+kubectl get nodes
+
+# Check Vigilo is deployed
+kubectl get cronjobs -n vigilo
+
+# Check pods are running (dummy services)
+kubectl get pods -n convogent
+
+# Trigger a manual scan (optional — don't need to wait 6 hours)
+kubectl create job --from=cronjob/vigilo-scan vigilo-scan-manual -n vigilo
+
+# Watch the scan run
+kubectl logs -f job/vigilo-scan-manual -n vigilo
+```
+
+---
+
+## Step 5: What Happens Automatically
+
+Once installed, Vigilo runs on schedule with no intervention:
+
+| CronJob | Schedule | What It Does |
+|---------|----------|--------------|
+| `vigilo-scan` | Every 6 hours | Collects metrics → AI prediction → Teams alert if critical |
+| `vigilo-report` | Monday 9 AM | Full health report → Teams + PDF |
+
+### Teams Alerts Arrive Automatically
+
+When a scan detects critical predictions:
+- **Adaptive Card** posted to your Teams channel
+- **Error/Fix/Prevent** format for each prediction
+- **Cluster score** included (0-10)
+
+---
+
+## Lifecycle Commands
+
+```bash
+# Resume after scaling to zero (or first-time setup)
 ./setup.sh
 
-# 2. Run AI prediction scan
-python3 main.py scan --kubeconfig ~/.kube/config
-
-# 3. Generate report (sends to Teams)
-python3 main.py report --teams-webhook <URL>
-
-# 4. Scale to zero when done (saves ~$28/night)
+# Scale nodes to 0 (saves cost — EKS control plane stays alive at ~$2.40/day)
 ./scale-to-zero.sh
+
+# Delete EVERYTHING (VPC, EKS, CloudFormation stacks — irreversible)
+./destroy.sh
 ```
 
-### All CLI Commands
+### Cost Breakdown
+
+| State | Cost |
+|-------|------|
+| Running (2x t3.medium + EKS) | ~$5.50/day |
+| Scaled to zero (EKS control plane only) | ~$2.40/day |
+| Destroyed | $0 |
+
+---
+
+## Cross-Account Bedrock Access
+
+Vigilo runs in **880335327306** (Cloud Migration) but calls Bedrock in **283744739430** (Aivar Agents).
+
+### How It Works
+
+```
+Vigilo Pod (IRSA) → sts:AssumeRole → 283744739430 → bedrock:InvokeModel
+```
+
+1. Vigilo pod uses IRSA (IAM Roles for Service Accounts) to get AWS credentials
+2. Assumes a cross-account role in 283744739430
+3. Calls Bedrock with Claude Sonnet 4
+
+### IAM Role in Bedrock Account (283744739430)
+
+```json
+{
+  "RoleName": "vigilo-bedrock-access",
+  "Permissions": ["bedrock:InvokeModel"],
+  "Trust": "EKS account's Vigilo service account (IRSA)"
+}
+```
+
+---
+
+## Troubleshooting
+
+### Cluster not accessible after setup
 
 ```bash
-# === PREDICTION ===
-# Scan cluster (real)
-python3 main.py scan --kubeconfig ~/.kube/config
-
-# Scan cluster (mock — no cluster needed)
-python3 main.py scan --mock
-
-# Predict deployment impact
-python3 main.py predict-deploy --manifest deployment.yaml
-
-# === STATUS ===
-# Full cluster inventory
-python3 main.py status --kubeconfig ~/.kube/config
-
-# === REPORTS ===
-# Generate + send to Teams
-python3 main.py report --teams-webhook "https://outlook.office.com/webhook/xxx"
-
-# Generate + email
-python3 main.py report --email devops@aivar.tech --teams-webhook "https://..."
+# Update kubeconfig manually
+aws eks update-kubeconfig --name vigilo-test --region us-east-1
 ```
 
----
-
-## Step 5: Install via Helm (In-Cluster)
-
-Once tested, deploy as a CronJob inside the cluster:
+### Scan not producing results
 
 ```bash
-helm repo add vigilo https://sriramg-aivar.github.io/vigilo
+# Check CronJob status
+kubectl get cronjobs -n vigilo
 
-helm install vigilo vigilo/vigilo \
-  --namespace vigilo \
-  --create-namespace \
-  --set aws.region=us-east-1 \
-  --set aws.bedrockRoleArn=arn:aws:iam::283744739430:role/vigilo-bedrock-access \
-  --set notifications.teamsWebhook="<YOUR_TEAMS_WEBHOOK_URL>" \
-  --set schedule.scan="0 */6 * * *" \
-  --set schedule.report="0 9 * * MON"
+# Check recent job logs
+kubectl logs -l job-name=vigilo-scan --tail=50 -n vigilo
+
+# Verify Bedrock access
+kubectl exec -it deploy/vigilo-debug -n vigilo -- aws bedrock-runtime invoke-model --help
 ```
 
-### What Gets Deployed:
-```
-namespace: vigilo
-├── CronJob: vigilo-scan (every 6 hours → predictions)
-├── CronJob: vigilo-report (weekly Monday 9 AM)
-├── ServiceAccount: vigilo (with IRSA for cross-account Bedrock)
-├── ConfigMap: vigilo-config (thresholds, namespaces)
-└── Secret: vigilo-credentials (Teams webhook)
-```
+### Teams notifications not arriving
 
----
+1. Verify webhook URL is set in the secret:
+   ```bash
+   kubectl get secret vigilo-credentials -n vigilo -o jsonpath='{.data.teams-webhook}' | base64 -d
+   ```
+2. Test the webhook manually (curl command in Step 2)
+3. Check Power Automate workflow is enabled in Teams
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  EKS Account (where Vigilo runs)                            │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐    │
-│  │  EKS Cluster: vigilo-test                           │    │
-│  │                                                     │    │
-│  │  namespace: convogent (dummy services)              │    │
-│  │  ├── frontend (nginx, 2 replicas)                   │    │
-│  │  ├── backend (httpbin, 2 replicas)                  │    │
-│  │  ├── chat-service (nginx, 2 replicas)               │    │
-│  │  ├── eval-service (nginx, 1 replica)                │    │
-│  │  ├── pca-service (nginx, 1 replica)                 │    │
-│  │  └── voice-service (nginx, 3 replicas)              │    │
-│  │                                                     │    │
-│  │  namespace: vigilo (our tool)                       │    │
-│  │  ├── CronJob: vigilo-scan                           │    │
-│  │  └── CronJob: vigilo-report                         │    │
-│  │                                                     │    │
-│  │  Karpenter (auto-scales nodes)                      │    │
-│  │  KEDA (auto-scales pods)                            │    │
-│  └─────────────────────────────────────────────────────┘    │
-│                                                             │
-└─────────────────────┬───────────────────────────────────────┘
-                      │ Cross-account assume role
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  AWS Account: 283744739430 (Aivar Agents)                   │
-│                                                             │
-│  Bedrock: Claude Sonnet 4                                   │
-│  (Vigilo calls this for AI predictions)                     │
-└─────────────────────────────────────────────────────────────┘
-                      │
-                      ▼
-┌─────────────────────────────────────────────────────────────┐
-│  Microsoft Teams                                            │
-│                                                             │
-│  Channel: #vigilo-alerts                                    │
-│  • Critical prediction alerts (Error/Fix/Prevent)           │
-│  • Weekly health reports                                    │
-└─────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `setup.sh` | Create/resume EKS test cluster + deploy dummy services |
-| `scale-to-zero.sh` | Scale all node groups to 0 (cost savings, ~$28/night saved) |
-| `destroy.sh` | Tear down the test cluster completely |
+### Nodes not scaling back up
 
 ```bash
-./setup.sh           # Create or resume cluster
-./scale-to-zero.sh   # Scale nodes to 0 (EKS control plane stays alive)
-./setup.sh           # Bring it back (scales nodes up, deploys services)
-./destroy.sh         # Delete everything
+# Check node group status
+aws eks describe-nodegroup --cluster-name vigilo-test --nodegroup-name vigilo-nodes --region us-east-1
+
+# Force scale up
+aws eks update-nodegroup-config --cluster-name vigilo-test --nodegroup-name vigilo-nodes --scaling-config minSize=2,maxSize=4,desiredSize=2 --region us-east-1
 ```
 
 ---
 
-## What I Need From You
+## Configuration Reference
 
-| # | What | How to Get |
-|---|------|-----------|
-| 1 | **AWS Account ID** | For test EKS cluster (which account to use?) |
-| 2 | **AWS credentials for that account** | To create EKS + deploy |
-| 3 | **Teams Webhook URL** | Channel → Connectors → Incoming Webhook → Copy URL |
-| 4 | **Bedrock account creds** (283744739430) | Already have (or set up cross-account role) |
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_ACCESS_KEY_ID` | Yes | AWS credentials for Cloud Migration account |
+| `AWS_SECRET_ACCESS_KEY` | Yes | AWS credentials |
+| `AWS_DEFAULT_REGION` | Yes | Region (default: us-east-1) |
+| `TEAMS_WEBHOOK_URL` | No | Power Automate webhook for Teams alerts |
+| `VIGILO_MODEL_ID` | No | Bedrock model (default: Claude Sonnet 4) |
+
+### Helm Values (Configurable)
+
+```yaml
+aws:
+  region: us-east-1
+  bedrockRoleArn: arn:aws:iam::283744739430:role/vigilo-bedrock-access
+
+notifications:
+  teamsWebhook: "https://prod-XX.westus.logic.azure.com/workflows/..."
+
+schedule:
+  scan: "0 */6 * * *"            # Every 6 hours
+  report: "0 9 * * MON"          # Weekly Monday 9 AM
+
+thresholds:
+  disk_warn_percent: 80
+  disk_critical_percent: 90
+  memory_warn_percent: 85
+  memory_critical_percent: 95
+  cert_warn_days: 14
+  cert_critical_days: 7
+```
 
 ---
 
-## Timeline
+## Summary: End-to-End Flow
 
-| Day | Task |
-|-----|------|
-| Day 1 | Create test EKS cluster + deploy dummy services |
-| Day 2 | Build Helm chart + deploy Vigilo |
-| Day 3 | Test predictions (live cluster) + Teams integration |
-| Day 4 | End-to-end: scan → report → Teams alert |
-| Day 5 | Demo to TL + file Warp Speed issue |
+```
+1. Export AWS creds
+2. Set Teams webhook URL
+3. Run ./setup.sh
+4. Wait ~15 mins for cluster creation
+5. ✅ Vigilo is running — predictions arrive in Teams automatically
+
+No Python commands. No manual scans. Helm chart handles everything.
+```

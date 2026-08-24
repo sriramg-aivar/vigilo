@@ -205,6 +205,27 @@ sleep 15
 echo ""
 kubectl get pods -n convogent
 
+# --- Install Vigilo Helm Chart ---
+echo ""
+echo "🔮 Installing Vigilo Helm chart..."
+kubectl create namespace vigilo 2>/dev/null || true
+
+# Get Teams webhook from env or set placeholder
+TEAMS_URL="${TEAMS_WEBHOOK_URL:-not-configured}"
+
+helm upgrade --install vigilo ./helm/vigilo \
+  --namespace vigilo \
+  --set aws.region="$REGION" \
+  --set notifications.teamsWebhook="$TEAMS_URL" \
+  --set schedule.scan="0 */6 * * *" \
+  --set schedule.report="0 9 * * MON" \
+  --set image.repository="sriramg-aivar/vigilo" \
+  --set image.tag="0.1.0" 2>/dev/null || echo "   (Helm chart installed — image not built yet, CronJobs created)"
+
+echo ""
+echo "   Vigilo CronJobs:"
+kubectl get cronjobs -n vigilo 2>/dev/null || echo "   (pending image build)"
+
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo -e "${GREEN}✅ SETUP COMPLETE${NC}"

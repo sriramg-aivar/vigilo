@@ -7,32 +7,33 @@ Vigilo is an AI-powered engine that:
 2. **Reports status** — full cluster inventory (nodes, pods, namespaces, Karpenter, KEDA)
 3. **Alerts teams** — Microsoft Teams notifications with Error/Fix/Prevent format
 
-Install via Helm or run as CLI. Works with any EKS cluster.
+Deploys via Helm as a CronJob inside your EKS cluster. No manual commands needed after install.
 
 ---
 
 ## Quick Start
 
 ```bash
-# Clone and install
-git clone https://github.com/sriramg-aivar/vigilo.git
-cd vigilo
-pip install -r requirements.txt
+# 1. Export AWS credentials
+export AWS_ACCESS_KEY_ID=<your-key>
+export AWS_SECRET_ACCESS_KEY=<your-secret>
+export AWS_DEFAULT_REGION=us-east-1
 
-# Predict failures (uses mock data — no cluster needed)
-python3 main.py scan --mock
+# 2. Create cluster + install Vigilo (one command)
+./setup.sh
 
-# Predict failures (real cluster)
-python3 main.py scan --kubeconfig ~/.kube/config
+# 3. Done. Vigilo runs automatically:
+#    - Scan every 6 hours → predictions sent to Teams
+#    - Report every Monday 9 AM → weekly health summary
+```
 
-# Cluster status
-python3 main.py status
+### Lifecycle
 
-# Generate report
-python3 main.py report --email devops@company.com --teams-webhook <URL>
-
-# Predict deployment impact
-python3 main.py predict-deploy --manifest deploy.yaml
+```bash
+./setup.sh           # Create VPC, EKS, deploy services, install Vigilo Helm chart
+./scale-to-zero.sh   # Scale nodes to 0 (saves cost, EKS control plane stays)
+./setup.sh           # Resume (scales nodes back up)
+./destroy.sh         # Delete EVERYTHING (VPC, EKS, CloudFormation stacks)
 ```
 
 ---
@@ -41,7 +42,7 @@ python3 main.py predict-deploy --manifest deploy.yaml
 
 ### 🔮 AI Failure Prediction
 
-Feeds cluster metrics to Claude (Bedrock) and gets back predictions with:
+Feeds cluster metrics to Claude (Bedrock) and returns predictions with:
 - **Time to failure** (hours/days)
 - **Severity** (CRITICAL / WARNING / INFO)
 - **Confidence level** (HIGH / MEDIUM / LOW)
@@ -61,20 +62,27 @@ Feeds cluster metrics to Claude (Bedrock) and gets back predictions with:
 
 ### 📊 Cluster Status
 
-Shows full inventory at any time:
+Full inventory at any time:
 - Nodes (count, type, status, pods per node)
 - Pods per namespace (running, pending, failed)
 - Deployments count
 - Karpenter nodepools and active nodes
 - KEDA ScaledObjects (active vs paused)
 
-### 📧 Notifications
+### 🔔 Teams Notifications (Error/Fix/Prevent)
 
-| Channel | When |
-|---------|------|
-| Microsoft Teams | Critical predictions, health reports (Error/Fix/Prevent format) |
-| Email (SES) | Weekly report with health score + predictions |
-| PDF/Markdown | On-demand report generation |
+Every alert follows:
+- **Error:** What is failing or about to fail
+- **Fix:** Immediate action to resolve
+- **Prevent:** Long-term fix to avoid recurrence
+
+Delivered via Microsoft Teams Power Automate workflow webhook.
+
+### 📄 Report Generation
+
+- Weekly health report with cluster score and all predictions
+- PDF and Markdown output
+- Sent to Teams and/or email automatically
 
 ---
 
@@ -149,62 +157,83 @@ Shows full inventory at any time:
 
 ---
 
-## Installation
+## Architecture
 
-### Option 1: CLI (pip)
-
-```bash
-pip install -r requirements.txt
-python3 main.py scan --kubeconfig ~/.kube/config
 ```
-
-### Option 2: Helm Chart (In-Cluster CronJob)
-
-```bash
-helm repo add vigilo https://aivar-tech.github.io/vigilo
-helm install vigilo vigilo/vigilo \
-  --namespace vigilo \
-  --create-namespace \
-  --set aws.region=us-east-1 \
-  --set notifications.teamsWebhook="https://outlook.office.com/webhook/xxx" \
-  --set schedule.scan="0 */6 * * *" \
-  --set schedule.report="0 9 * * MON"
-```
-
-### Option 3: Docker
-
-```bash
-docker run --rm \
-  -v ~/.kube/config:/root/.kube/config \
-  -v ~/.aws:/root/.aws \
-  aivar/vigilo scan
+┌─────────────────────────────────────────────────────┐
+│  AWS Account: 880335327306 (Cloud Migration)        │
+│                                                     │
+│  ┌───────────────────────────────────────────┐      │
+│  │  EKS Cluster                              │      │
+│  │                                           │      │
+│  │  namespace: vigilo                        │      │
+│  │  ├── CronJob: vigilo-scan (every 6h)     │      │
+│  │  └── CronJob: vigilo-report (Mon 9 AM)   │      │
+│  │                                           │      │
+│  │  ┌────────────┐  ┌────────────────────┐   │      │
+│  │  │ Collector  │  │    Predictor       │   │      │
+│  │  │ (K8s API)  │→ │ (Bedrock/Claude)   │   │      │
+│  │  └────────────┘  └─────────┬──────────┘   │      │
+│  │                            │              │      │
+│  │                   ┌────────┴───────────┐   │      │
+│  │                   │     Reporter       │   │      │
+│  │                   │ (Teams/PDF)        │   │      │
+│  │                   └────────────────────┘   │      │
+│  └───────────────────────────────────────────┘      │
+└──────────────────────────┬──────────────────────────┘
+                           │ Cross-account role assumption
+                           ▼
+┌─────────────────────────────────────────────────────┐
+│  AWS Account: 283744739430 (Aivar Agents)           │
+│                                                     │
+│  Bedrock: Claude Sonnet 4 (AI predictions)          │
+└─────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────┐
+│  Microsoft Teams                                    │
+│  • Critical alerts (Error/Fix/Prevent)              │
+│  • Weekly health reports                            │
+└─────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Configuration
+## How Predictions Work
 
-### Environment Variables
+1. **Collect** — Pull live metrics from K8s API (nodes, pods, events, certs, HPA, KEDA)
+2. **Trend** — Calculate growth rates and trajectories
+3. **Predict** — Feed to Claude (Bedrock) for AI analysis
+4. **Score** — Generate cluster health score (0-10) with confidence levels
+5. **Alert** — Send critical predictions to Teams immediately
+6. **Report** — Weekly PDF/Markdown with all predictions and actions
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `AWS_DEFAULT_REGION` | Yes | AWS region for Bedrock (default: us-east-1) |
-| `AWS_ACCESS_KEY_ID` | Yes* | AWS credentials (*or use IAM role) |
-| `AWS_SECRET_ACCESS_KEY` | Yes* | AWS credentials |
-| `KUBECONFIG` | No | Path to kubeconfig (default: ~/.kube/config) |
-| `VIGILO_MODEL_ID` | No | Bedrock model (default: us.anthropic.claude-sonnet-4-20250514-v1:0) |
-| `TEAMS_WEBHOOK_URL` | No | Microsoft Teams webhook URL |
-| `SES_SENDER` | No | Email sender (for reports) |
+---
+
+## Helm Chart
+
+The Helm chart deploys Vigilo as CronJobs inside your cluster. No manual commands needed.
+
+### What Gets Deployed
+
+```
+namespace: vigilo
+├── CronJob: vigilo-scan (every 6 hours → predictions)
+├── CronJob: vigilo-report (weekly Monday 9 AM)
+├── ServiceAccount: vigilo (with IRSA for cross-account Bedrock)
+├── ConfigMap: vigilo-config (thresholds, namespaces)
+└── Secret: vigilo-credentials (Teams webhook)
+```
 
 ### Helm Values
 
 ```yaml
 aws:
   region: us-east-1
+  bedrockRoleArn: arn:aws:iam::283744739430:role/vigilo-bedrock-access
 
 notifications:
-  teamsWebhook: "https://outlook.office.com/webhook/your-url"
-  email: devops@yourcompany.com
+  teamsWebhook: "https://prod-XX.westus.logic.azure.com/workflows/..."
 
 schedule:
   scan: "0 */6 * * *"            # Every 6 hours
@@ -221,90 +250,34 @@ thresholds:
 
 ---
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│              Your EKS Cluster                        │
-│                                                     │
-│  ┌───────────────────────────────────────────┐      │
-│  │        Vigilo (CronJob/Pod)               │      │
-│  │                                           │      │
-│  │  ┌────────────┐  ┌────────────────────┐   │      │
-│  │  │ Collector  │  │    Predictor       │   │      │
-│  │  │ (K8s API)  │→ │ (Bedrock/Claude)   │   │      │
-│  │  └────────────┘  └─────────┬──────────┘   │      │
-│  │                            │              │      │
-│  │                   ┌────────┴───────────┐   │      │
-│  │                   │     Reporter       │   │      │
-│  │                   │ (Teams/Email/PDF)  │   │      │
-│  │                   └────────┬───────────┘   │      │
-│  └────────────────────────────┼──────────────┘      │
-│                               │                     │
-│                               ▼                     │
-│                      ┌──────────────┐               │
-│                      │   Karpenter  │               │
-│                      │   (nodes)    │               │
-│                      └──────────────┘               │
-└─────────────────────────────────────────────────────┘
-                               │
-                               ▼
-                    ┌──────────────────┐
-                    │  Teams / Email   │
-                    │  (Notifications) │
-                    └──────────────────┘
-```
-
----
-
-## How Predictions Work
-
-1. **Collect** — Pull live metrics from K8s API (nodes, pods, events, certs, HPA, KEDA)
-2. **Trend** — Calculate growth rates and trajectories
-3. **Predict** — Feed to Claude (Bedrock) for AI analysis
-4. **Score** — Generate cluster health score (0-10) with confidence levels
-5. **Alert** — Send critical predictions to Teams/email immediately
-6. **Report** — Weekly PDF with all predictions and actions
-
----
-
 ## Scripts
 
 | Script | Purpose |
 |--------|---------|
-| `setup.sh` | Create/resume EKS test cluster + deploy dummy services |
-| `scale-to-zero.sh` | Scale all node groups to 0 (cost savings for non-prod) |
-| `destroy.sh` | Tear down the test cluster |
-
-```bash
-# Set up the test cluster
-./setup.sh
-
-# Scale to zero at night (saves ~$28/night per cluster)
-./scale-to-zero.sh
-
-# Bring it back
-./setup.sh
-```
+| `setup.sh` | Create VPC, EKS cluster, deploy services, install Vigilo Helm chart |
+| `scale-to-zero.sh` | Scale all node groups to 0 (cost savings) |
+| `destroy.sh` | Delete EVERYTHING (VPC, EKS, CloudFormation stacks) |
 
 ---
 
-## CLI Commands
+## Configuration
 
-| Command | Description |
-|---------|-------------|
-| `scan` | Run AI failure prediction scan |
-| `predict-deploy` | Predict impact of a deployment manifest before applying |
-| `report` | Generate health report (email + Teams) |
-| `status` | Show full cluster inventory |
+### Environment Variables
 
-```bash
-python3 main.py scan --mock                           # test without cluster
-python3 main.py scan --kubeconfig ~/.kube/config      # real cluster
-python3 main.py predict-deploy --manifest deploy.yaml # deployment impact
-python3 main.py report --teams-webhook <URL>          # generate report
-python3 main.py status                                # cluster inventory
-```
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `AWS_DEFAULT_REGION` | Yes | AWS region (default: us-east-1) |
+| `AWS_ACCESS_KEY_ID` | Yes* | AWS credentials (*or use IAM role) |
+| `AWS_SECRET_ACCESS_KEY` | Yes* | AWS credentials |
+| `TEAMS_WEBHOOK_URL` | No | Microsoft Teams Power Automate webhook URL |
+| `VIGILO_MODEL_ID` | No | Bedrock model (default: Claude Sonnet 4) |
+
+### AWS Accounts
+
+| Account | ID | Purpose |
+|---------|-----|---------|
+| Cloud Migration | 880335327306 | EKS cluster (kubectl access) |
+| Aivar Agents | 283744739430 | Bedrock (Claude Sonnet 4 for AI predictions) |
 
 ---
 
@@ -324,16 +297,21 @@ python3 main.py status                                # cluster inventory
 
 ## Development
 
+For local development and testing only:
+
 ```bash
 # Clone
 git clone https://github.com/sriramg-aivar/vigilo.git
 cd vigilo
 
-# Install
+# Install dependencies
 pip install -r requirements.txt
 
-# Test prediction (no cluster needed)
+# Test prediction (no cluster needed — uses mock data)
 python3 main.py scan --mock
+
+# Run against real cluster
+python3 main.py scan --kubeconfig ~/.kube/config
 
 # Cluster status
 python3 main.py status
@@ -342,18 +320,14 @@ python3 main.py status
 pytest tests/
 ```
 
----
+### CLI Commands (Dev Only)
 
-## Roadmap
-
-| Phase | Features | Status |
-|-------|----------|--------|
-| v0.1 | Prediction engine + CLI + Teams | ✅ Done |
-| v0.2 | Real K8s cluster integration | 🔄 Next |
-| v0.3 | Helm chart + CronJob deployment | Planned |
-| v0.4 | Email reports (SES) + PDF | Planned |
-| v0.5 | Deployment impact prediction | Planned |
-| v1.0 | Production release | Planned |
+| Command | Description |
+|---------|-------------|
+| `scan` | Run AI failure prediction scan |
+| `predict-deploy` | Predict impact of a deployment manifest before applying |
+| `report` | Generate health report (Teams + PDF) |
+| `status` | Show full cluster inventory |
 
 ---
 
@@ -361,11 +335,10 @@ pytest tests/
 
 | Requirement | Purpose |
 |-------------|---------|
-| Python 3.10+ | Runtime |
-| AWS Bedrock access | Claude for predictions |
-| EKS cluster | Metrics source |
-| kubectl configured | Cluster access |
-| Teams webhook (optional) | Notifications |
+| AWS credentials (Cloud Migration account) | EKS cluster access |
+| AWS Bedrock access (Aivar Agents account) | Claude for AI predictions |
+| Microsoft Teams webhook | Notifications |
+| `kubectl` configured | Cluster access (handled by setup.sh) |
 
 ---
 
