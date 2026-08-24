@@ -210,8 +210,8 @@ echo ""
 echo "🔮 Installing Vigilo Helm chart..."
 kubectl create namespace vigilo 2>/dev/null || true
 
-# Get Teams webhook from env or set placeholder
-TEAMS_URL="${TEAMS_WEBHOOK_URL:-not-configured}"
+# Get Teams webhook from env or use default
+TEAMS_URL="${TEAMS_WEBHOOK_URL:-https://defaultb3764647b13743b6b0737c4a9a290d.6a.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/03/workflows/daba94ec42d2479ebc3331960bc2912b/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=hf45q2cgVmcqA-_VA3zxOkZec_pb_FiuRdKAYoh2QjI}"
 
 helm upgrade --install vigilo ./helm/vigilo \
   --namespace vigilo \
