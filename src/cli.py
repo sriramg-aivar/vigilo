@@ -11,6 +11,7 @@ from src.predictor import ProphecyEngine
 from src.collector import MetricsCollector
 from src.reporter import ReportGenerator
 from src.scheduler import ClusterScheduler
+from src.real_collector import RealCollector
 
 
 def main():
@@ -26,7 +27,7 @@ def main():
     scan_parser.add_argument("--kubeconfig", type=str, default=None, help="Path to kubeconfig file")
     scan_parser.add_argument("--context", type=str, default=None, help="K8s context to use")
     scan_parser.add_argument("--region", type=str, default="us-east-1", help="AWS region for Bedrock")
-    scan_parser.add_argument("--model", type=str, default="us.anthropic.claude-sonnet-4-20250514-v1:0", help="Bedrock model ID")
+    scan_parser.add_argument("--model", type=str, default="us.anthropic.claude-sonnet-4-5-20250929-v1:0", help="Bedrock model ID")
     scan_parser.add_argument("--output", type=str, choices=["terminal", "json", "pdf"], default="terminal", help="Output format")
     scan_parser.add_argument("--output-file", type=str, default=None, help="Output file path (for json/pdf)")
     scan_parser.add_argument("--mock", action="store_true", help="Use mock data instead of real cluster")
@@ -37,7 +38,7 @@ def main():
     deploy_parser.add_argument("--manifest", type=str, required=True, help="Path to deployment manifest (YAML/JSON)")
     deploy_parser.add_argument("--kubeconfig", type=str, default=None, help="Path to kubeconfig file")
     deploy_parser.add_argument("--region", type=str, default="us-east-1", help="AWS region for Bedrock")
-    deploy_parser.add_argument("--model", type=str, default="us.anthropic.claude-sonnet-4-20250514-v1:0", help="Bedrock model ID")
+    deploy_parser.add_argument("--model", type=str, default="us.anthropic.claude-sonnet-4-5-20250929-v1:0", help="Bedrock model ID")
     deploy_parser.add_argument("--mock", action="store_true", help="Use mock cluster data")
 
     # --- report command ---
@@ -95,12 +96,25 @@ def run_scan(args):
     print("🔮 Kubogent Prophecy — Scanning cluster...\n")
 
     # Collect metrics
-    collector = MetricsCollector(kubeconfig=args.kubeconfig, context=args.context)
     if args.mock:
+        collector = MetricsCollector(kubeconfig=args.kubeconfig, context=args.context)
         metrics = collector.collect()
         print("📊 Using mock cluster data (use --kubeconfig for real cluster)\n")
     else:
-        metrics = collector.collect()  # TODO: switch to collect_real() when ready
+        try:
+            real_collector = RealCollector(kubeconfig=args.kubeconfig, context=args.context)
+            metrics = real_collector.collect()
+            print("")
+        except ImportError as e:
+            print(f"❌ {e}")
+            print("   Falling back to mock data. Install kubernetes: pip install kubernetes\n")
+            collector = MetricsCollector(kubeconfig=args.kubeconfig, context=args.context)
+            metrics = collector.collect()
+        except Exception as e:
+            print(f"❌ Failed to connect to cluster: {e}")
+            print("   Falling back to mock data.\n")
+            collector = MetricsCollector(kubeconfig=args.kubeconfig, context=args.context)
+            metrics = collector.collect()
 
     # Run predictions
     print("🧠 Analyzing trends with AI...\n")
@@ -302,16 +316,22 @@ def run_wakeup(args):
 
 def run_status(args):
     """Show cluster inventory."""
-    scheduler = ClusterScheduler(
-        kubeconfig=args.kubeconfig,
-        context=args.context,
-        namespace=args.namespace,
-        dry_run=True
-    )
-    status = scheduler.status()
+    try:
+        real_collector = RealCollector(kubeconfig=args.kubeconfig, context=args.context)
+        status = real_collector.get_inventory(namespace=args.namespace)
+    except Exception as e:
+        print(f"  ⚠️  Cannot connect to cluster: {e}")
+        print(f"  Using mock data.\n")
+        scheduler = ClusterScheduler(
+            kubeconfig=args.kubeconfig,
+            context=args.context,
+            namespace=args.namespace,
+            dry_run=True
+        )
+        status = scheduler.status()
 
     if args.output == "json":
-        print(json.dumps(status, indent=2))
+        print(json.dumps(status, indent=2, default=str))
     else:
         print_cluster_status(status)
 

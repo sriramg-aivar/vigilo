@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 class ProphecyEngine:
     """Core prediction engine using AWS Bedrock (Claude)."""
 
-    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"):
+    def __init__(self, region: str = "us-east-1", model_id: str = "us.anthropic.claude-sonnet-4-5-20250929-v1:0"):
         self.bedrock = boto3.client("bedrock-runtime", region_name=region)
         self.model_id = model_id
 
