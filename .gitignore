@@ -16,3 +16,4 @@ venv/
 *.pdf
 *.log
 .pytest_cache/
+vigilo-planning.json
