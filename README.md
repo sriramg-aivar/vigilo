@@ -23,7 +23,7 @@ export AWS_DEFAULT_REGION=us-east-1
 ./setup.sh
 
 # 3. Done. Vigilo runs automatically:
-#    - Scan every 6 hours → predictions sent to Teams
+#    - Scan every day 7 PM → predictions sent to Teams
 #    - Report every Monday 9 AM → weekly health summary
 ```
 
@@ -167,7 +167,7 @@ Delivered via Microsoft Teams Power Automate workflow webhook.
 │  │  EKS Cluster                              │      │
 │  │                                           │      │
 │  │  namespace: vigilo                        │      │
-│  │  ├── CronJob: vigilo-scan (every 6h)     │      │
+│  │  ├── CronJob: vigilo-scan (every day 7 PM)│      │
 │  │  └── CronJob: vigilo-report (Mon 9 AM)   │      │
 │  │                                           │      │
 │  │  ┌────────────┐  ┌────────────────────┐   │      │
@@ -199,6 +199,60 @@ Delivered via Microsoft Teams Power Automate workflow webhook.
 
 ---
 
+## How Vigilo Scans Your Cluster
+
+Vigilo runs **inside** the cluster as a CronJob. It uses a Kubernetes ServiceAccount with read-only ClusterRole — no external credentials needed for cluster access.
+
+### What Vigilo Reads (via K8s API)
+
+| K8s API Endpoint | What It Gets |
+|------------------|-------------|
+| `/api/v1/nodes` | Node health, CPU, memory, disk, instance type, age |
+| `/api/v1/pods` | Pod status, restarts, resource usage vs limits |
+| `/api/v1/events` | Warnings, FailedScheduling, OOMKilled events |
+| `/api/v1/secrets` (TLS type) | Certificate expiry dates |
+| `/api/v1/resourcequotas` | Namespace resource limits vs usage |
+| `/apis/apps/v1/deployments` | Deployment replicas, images, status |
+| `/apis/autoscaling/v2/hpa` | HPA current vs max replicas, CPU target |
+| `/apis/karpenter.sh/v1/nodepools` | Karpenter nodepool status |
+| `/apis/keda.sh/v1alpha1/scaledobjects` | KEDA scaling status |
+
+### RBAC (What Vigilo Has Access To)
+
+```yaml
+# ClusterRole: vigilo-reader (READ-ONLY)
+rules:
+  - apiGroups: [""]
+    resources: [nodes, pods, events, secrets, namespaces, resourcequotas]
+    verbs: [get, list, watch]       # READ ONLY — no create/update/delete
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [autoscaling]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch]
+  - apiGroups: [karpenter.sh]
+    resources: [nodepools, nodeclaims]
+    verbs: [get, list, watch]
+  - apiGroups: [keda.sh]
+    resources: [scaledobjects]
+    verbs: [get, list, watch]
+```
+
+**Vigilo NEVER modifies anything in your cluster.** It only reads.
+
+### Cross-Account Bedrock Access
+
+The cluster may be in a different AWS account than Bedrock. Vigilo handles this via:
+- **IRSA (recommended):** ServiceAccount annotated with IAM role that can assume Bedrock role
+- **Environment variables:** `BEDROCK_AWS_ACCESS_KEY_ID`, `BEDROCK_AWS_SECRET_ACCESS_KEY`, `BEDROCK_AWS_SESSION_TOKEN`
+
+```
+EKS Pod (Account A) → assumes IAM role → Bedrock (Account B) → Claude Sonnet 4.5
+```
+
+---
+
 ## How Predictions Work
 
 1. **Collect** — Pull live metrics from K8s API (nodes, pods, events, certs, HPA, KEDA)
@@ -214,14 +268,32 @@ Delivered via Microsoft Teams Power Automate workflow webhook.
 
 The Helm chart deploys Vigilo as CronJobs inside your cluster. No manual commands needed.
 
+### Install (Standalone — Any EKS Cluster)
+
+```bash
+# Clone the repo
+git clone https://github.com/sriramg-aivar/vigilo.git
+cd vigilo
+
+# Install Vigilo into your cluster
+helm install vigilo ./helm/vigilo \
+  --namespace vigilo \
+  --create-namespace \
+  --set aws.region=us-east-1 \
+  --set notifications.teamsWebhook="<YOUR_TEAMS_WEBHOOK_URL>" \
+  --set aws.bedrock.roleArn="arn:aws:iam::283744739430:role/vigilo-bedrock-access"
+```
+
 ### What Gets Deployed
 
 ```
 namespace: vigilo
-├── CronJob: vigilo-scan (every 6 hours → predictions)
-├── CronJob: vigilo-report (weekly Monday 9 AM)
+├── CronJob: vigilo-scan (every day 7 PM → predictions sent to Teams)
+├── CronJob: vigilo-report (weekly Monday 9 AM → full report to Teams)
 ├── ServiceAccount: vigilo (with IRSA for cross-account Bedrock)
-├── ConfigMap: vigilo-config (thresholds, namespaces)
+├── ClusterRole: vigilo-reader (read-only access to cluster resources)
+├── ClusterRoleBinding: vigilo-reader-binding
+├── ConfigMap: vigilo-config (Teams webhook, region, model)
 └── Secret: vigilo-credentials (Teams webhook)
 ```
 
@@ -236,8 +308,8 @@ notifications:
   teamsWebhook: "https://prod-XX.westus.logic.azure.com/workflows/..."
 
 schedule:
-  scan: "0 */6 * * *"            # Every 6 hours
-  report: "0 9 * * MON"          # Weekly Monday 9 AM
+  scan: "30 13 * * *"            # Every day 7 PM IST (1:30 PM UTC)
+  report: "30 3 * * MON"         # Weekly Monday 9 AM IST (3:30 AM UTC)
 
 thresholds:
   disk_warn_percent: 80
