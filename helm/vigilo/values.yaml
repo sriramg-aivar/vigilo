@@ -30,9 +30,8 @@ notifications:
 
 # Schedule (cron format — UTC)
 schedule:
-  # Scan cluster for predictions (7 PM IST = 1:30 PM UTC daily)
-  scan: "30 13 * * *"
-  # Weekly report to Teams (Monday 9 AM IST = 3:30 AM UTC)
+  # Weekly scan + report (Monday 9 AM IST = 3:30 AM UTC)
+  # Scans cluster → AI predictions → sends full report to Teams
   report: "30 3 * * MON"
 
 # Scan configuration

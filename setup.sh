@@ -217,7 +217,6 @@ helm upgrade --install vigilo ./helm/vigilo \
   --namespace vigilo \
   --set aws.region="$REGION" \
   --set notifications.teamsWebhook="$TEAMS_URL" \
-  --set schedule.scan="30 13 * * *" \
   --set schedule.report="30 3 * * MON" \
   --set image.repository="sriramg-aivar/vigilo" \
   --set image.tag="0.1.0" 2>/dev/null || echo "   (Helm chart installed — image not built yet, CronJobs created)"

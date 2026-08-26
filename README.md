@@ -23,7 +23,7 @@ export AWS_DEFAULT_REGION=us-east-1
 ./setup.sh
 
 # 3. Done. Vigilo runs automatically:
-#    - Scan every day 7 PM → predictions sent to Teams
+#    - Scan every Monday 9 AM → predictions sent to Teams
 #    - Report every Monday 9 AM → weekly health summary
 ```
 
@@ -167,7 +167,6 @@ Delivered via Microsoft Teams Power Automate workflow webhook.
 │  │  EKS Cluster                              │      │
 │  │                                           │      │
 │  │  namespace: vigilo                        │      │
-│  │  ├── CronJob: vigilo-scan (every day 7 PM)│      │
 │  │  └── CronJob: vigilo-report (Mon 9 AM)   │      │
 │  │                                           │      │
 │  │  ┌────────────┐  ┌────────────────────┐   │      │
@@ -288,8 +287,7 @@ helm install vigilo ./helm/vigilo \
 
 ```
 namespace: vigilo
-├── CronJob: vigilo-scan (every day 7 PM → predictions sent to Teams)
-├── CronJob: vigilo-report (weekly Monday 9 AM → full report to Teams)
+├── CronJob: vigilo-report (weekly Monday 9 AM → scan + report to Teams)
 ├── ServiceAccount: vigilo (with IRSA for cross-account Bedrock)
 ├── ClusterRole: vigilo-reader (read-only access to cluster resources)
 ├── ClusterRoleBinding: vigilo-reader-binding
@@ -308,7 +306,6 @@ notifications:
   teamsWebhook: "https://prod-XX.westus.logic.azure.com/workflows/..."
 
 schedule:
-  scan: "30 13 * * *"            # Every day 7 PM IST (1:30 PM UTC)
   report: "30 3 * * MON"         # Weekly Monday 9 AM IST (3:30 AM UTC)
 
 thresholds:
