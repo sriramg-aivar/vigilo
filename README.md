@@ -167,17 +167,17 @@ Delivered via Microsoft Teams Power Automate workflow webhook.
 │  │  EKS Cluster                              │      │
 │  │                                           │      │
 │  │  namespace: vigilo                        │      │
-│  │  └── CronJob: vigilo-report (Mon 9 AM)   │      │
+│  │  └── CronJob: vigilo-report (Mon 9 AM)    │      │
 │  │                                           │      │
 │  │  ┌────────────┐  ┌────────────────────┐   │      │
 │  │  │ Collector  │  │    Predictor       │   │      │
 │  │  │ (K8s API)  │→ │ (Bedrock/Claude)   │   │      │
 │  │  └────────────┘  └─────────┬──────────┘   │      │
 │  │                            │              │      │
-│  │                   ┌────────┴───────────┐   │      │
-│  │                   │     Reporter       │   │      │
-│  │                   │ (Teams/PDF)        │   │      │
-│  │                   └────────────────────┘   │      │
+│  │                   ┌────────┴───────────┐  │      │
+│  │                   │     Reporter       │  │      │
+│  │                   │ (Teams/PDF)        │  │      │
+│  │                   └────────────────────┘  │      │
 │  └───────────────────────────────────────────┘      │
 └──────────────────────────┬──────────────────────────┘
                            │ Cross-account role assumption
