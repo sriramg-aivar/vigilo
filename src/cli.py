@@ -44,8 +44,7 @@ def main():
     deploy_parser.add_argument("--mock", action="store_true", help="Use mock cluster data")
 
     # --- report command ---
-    report_parser = subparsers.add_parser("report", help="Generate and send weekly report")
-    report_parser.add_argument("--email", type=str, nargs="+", help="Email recipients")
+    report_parser = subparsers.add_parser("report", help="Generate and send report to Teams")
     report_parser.add_argument("--teams-webhook", type=str, help="Microsoft Teams incoming webhook URL")
     report_parser.add_argument("--region", type=str, default="us-east-1", help="AWS region")
     report_parser.add_argument("--mock", action="store_true", help="Use mock data")
@@ -183,19 +182,18 @@ def run_report(args):
 
     reporter = ReportGenerator()
 
-    if args.email:
-        import os
-        sender = os.environ.get("SES_SENDER", "sriram.g@aivar.tech")
-        reporter.send_email(predictions, metrics, args.email, sender=sender)
-        print(f"✅ Report sent to: {', '.join(args.email)}")
-
     if args.teams_webhook:
         reporter.send_teams_alert(predictions, args.teams_webhook, metrics)
         print("✅ Report sent to Microsoft Teams")
-
-    if not args.email and not args.teams_webhook:
-        print("⚠️  No recipients specified. Use --email or --teams-webhook")
-        print_predictions(predictions)
+    else:
+        import os
+        webhook = os.environ.get("TEAMS_WEBHOOK_URL", "")
+        if webhook:
+            reporter.send_teams_alert(predictions, webhook, metrics)
+            print("✅ Report sent to Microsoft Teams")
+        else:
+            print("⚠️  No Teams webhook. Use --teams-webhook or set TEAMS_WEBHOOK_URL")
+            print_predictions(predictions)
 
 
 def print_predictions(predictions: dict):
