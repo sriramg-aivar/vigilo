@@ -28,12 +28,12 @@ notifications:
   email: ""
   sesSender: ""
 
-# Schedule (cron format)
+# Schedule (cron format — UTC)
 schedule:
-  # How often to scan cluster for predictions
-  scan: "0 */6 * * *"        # Every 6 hours
-  # When to send weekly report
-  report: "0 9 * * MON"      # Monday 9 AM
+  # Scan cluster for predictions (7 PM IST = 1:30 PM UTC daily)
+  scan: "30 13 * * *"
+  # Weekly report to Teams (Monday 9 AM IST = 3:30 AM UTC)
+  report: "30 3 * * MON"
 
 # Scan configuration
 scan:
