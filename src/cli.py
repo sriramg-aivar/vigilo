@@ -184,7 +184,9 @@ def run_report(args):
     reporter = ReportGenerator()
 
     if args.email:
-        reporter.send_email(predictions, metrics, args.email)
+        import os
+        sender = os.environ.get("SES_SENDER", "sriram.g@aivar.tech")
+        reporter.send_email(predictions, metrics, args.email, sender=sender)
         print(f"✅ Report sent to: {', '.join(args.email)}")
 
     if args.teams_webhook:

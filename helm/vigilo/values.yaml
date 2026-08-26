@@ -3,7 +3,7 @@
 
 # Docker image
 image:
-  repository: sriramg-aivar/vigilo
+  repository: public.ecr.aws/u7h9i3k7/vigilo
   tag: "0.1.0"
   pullPolicy: IfNotPresent
 
